@@ -87,7 +87,7 @@ async function iniciarAmbiente() {
     fs.rmSync(pasta, { recursive: true, force: true });
   }
 
-  return { knex, base, chamar, login, criarUsuarioNoBanco, encerrar };
+  return { knex, base, porta, criarBanco: (nome) => pg.createDatabase(nome), chamar, login, criarUsuarioNoBanco, encerrar };
 }
 
 module.exports = { iniciarAmbiente };

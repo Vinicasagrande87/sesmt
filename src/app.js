@@ -4,6 +4,7 @@ const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const routes = require('./routes');
+const knex = require('./database/db');
 const { tratarErros } = require('./utils/erros');
 
 const app = express();
@@ -17,6 +18,16 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.get('/', (req, res) => {
   res.send('servidor ativo👌');
+});
+
+// Saúde do serviço (usada pelo monitoramento da hospedagem): não exige login e não expõe detalhes
+app.get('/status', async (req, res) => {
+  try {
+    await knex.raw('select 1');
+    return res.json({ api: 'ok', banco: 'ok' });
+  } catch (error) {
+    return res.status(503).json({ api: 'ok', banco: 'indisponível' });
+  }
 });
 
 app.use(routes);

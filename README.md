@@ -76,6 +76,7 @@ O modelo completo está sendo desenhado junto com a rotina real de um SESMT com 
 ```bash
 npm install
 cp .env.example .env          # cole a DATABASE_URL do seu Postgres e gere o JWT_SECRET
+npm run db:testar             # confere conexão, SSL e migrations pendentes (nunca mostra a senha)
 npx knex migrate:latest
 npm run criar-admin -- "Seu Nome" voce@exemplo.com "uma-senha-forte"
 npm run dev
@@ -113,6 +114,7 @@ O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 | POST | `/entregas/qr` | Entrega por QR code, com baixa de estoque |
 | GET/POST | `/estoque` | Movimentações de estoque |
 | GET | `/auditoria` | Log de auditoria (matriz) |
+| GET | `/status` | Saúde da API e do banco (público, para monitoramento) |
 | GET/POST | `/treinamentos`, `/certificados`, `/acidentes` | Demais cadastros |
 
 Todas as rotas, exceto `/ping` e `/auth/login`, exigem o cabeçalho `Authorization: Bearer <token>`.
