@@ -43,6 +43,22 @@ A ideia é usar o conhecimento técnico da área para construir uma ferramenta q
 - **Saldos valorizados e alerta de estoque mínimo** por filial.
 - **Concorrência segura:** os lotes são travados durante a saída, então duas entregas simultâneas não usam o mesmo saldo (há teste para isso).
 
+### Treinamentos
+
+- **Catálogo da matriz:** NR de referência, carga horária, conteúdo programático e validade. Cada **função** tem a sua lista de treinamentos exigidos.
+- **Turmas por filial:** datas, local, instrutor e qualificação do instrutor.
+- **Lista de presença assinada com o crachá QR + PIN,** no mesmo padrão das entregas:
+  - código de verificação, técnico, IP e hora do servidor;
+  - uma assinatura por pessoa por dia, para treinamentos de vários dias;
+  - listas em papel antigas podem ser lançadas manualmente, com justificativa;
+  - presença errada é anulada, nunca apagada.
+- **Encerramento da turma:** é aprovado quem esteve em todos os dias, e o instrutor pode marcar reprovação na avaliação. Isso gera o registro de capacitação com o vencimento calculado (31/01 + 1 mês = 28/02).
+- **Certificados externos:** curso feito fora, com o PDF anexado (com hash).
+- **Pendências por filial e setor:** o que está faltando, vencido ou vencendo em X dias, conforme as exigências da função.
+- **PDFs:** lista de presença e certificado com código de verificação.
+- **Página de presença** ([public/presenca.html](public/presenca.html)): o técnico escolhe a turma do dia e lê os crachás em sequência. Quem ainda não tem PIN cadastra ali mesmo.
+- **`/verificar/<código>`** confirma entregas, presenças e certificados.
+
 ### Estrutura e controle
 - **Estrutura multi-filial:** matriz → filiais (cada uma com CNPJ próprio, UF, cidade e bairro) → prédios e setores. Funções num catálogo único do grupo.
 - **Permissões por perfil e por filial:**
@@ -70,7 +86,7 @@ O modelo completo está sendo desenhado junto com a rotina real de um SESMT com 
 
 1. ~~**Estrutura multi-filial** com permissões por filial~~ ✅ concluída
 2. ~~**EPI com valor jurídico** e **estoque com custo histórico (PEPS)**~~ ✅ concluída
-3. **Treinamentos:** exigências por função e lista de presença assinada com o crachá.
+3. ~~**Treinamentos:** exigências por função e lista de presença assinada com o crachá~~ ✅ concluída
 4. **ASOs (PCMSO):** controle de vencimentos, com acesso restrito aos dados de saúde (LGPD).
 5. **PPCI por prédio:**
    - projeto aprovado e alvará;
@@ -138,7 +154,19 @@ O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 | POST | `/entregas/qr` | Entrega por QR + PIN (+ foto), baixa PEPS |
 | POST | `/entregas` | Entrega manual com justificativa (gestão) |
 | POST | `/entregas/:id/estorno` | Estorno de entrega (gestão) |
-| GET | `/verificar/:codigo` | Verificação pública de uma entrega |
+| GET | `/verificar/:codigo` | Verificação pública de entrega, presença ou certificado |
+| GET/POST/PUT | `/treinamentos` | Catálogo de treinamentos (matriz) |
+| GET/PUT | `/funcoes/:id/treinamentos` | Treinamentos exigidos pela função (matriz) |
+| GET | `/treinamentos/pendencias` | Faltando, vencidos e vencendo por filial/setor/funcionário |
+| GET/POST/PUT | `/turmas` | Turmas de treinamento |
+| POST | `/turmas/:id/presencas` | Presença por QR + PIN (no dia da turma) |
+| POST | `/turmas/:id/presencas/manual` | Presença manual com justificativa (gestão) |
+| POST | `/presencas/:id/anular` | Anulação de presença (gestão) |
+| POST | `/turmas/:id/encerrar`, `/turmas/:id/cancelar` | Encerramento com resultados / cancelamento |
+| GET | `/turmas/:id/lista-presenca` | Lista de presença em PDF |
+| GET/POST | `/certificados` | Capacitações; POST lança certificado externo com arquivo |
+| POST | `/certificados/:id/anular` | Anulação de capacitação (gestão) |
+| GET | `/certificados/:id/pdf` | Certificado em PDF (ou o arquivo do externo) |
 | POST | `/estoque/entradas` | Entrada de lote com preço pago |
 | GET | `/estoque/saldos`, `/estoque/lotes`, `/estoque/movimentacoes` | Saldos valorizados, lotes e extrato |
 | POST | `/estoque/descartes`, `/estoque/ajustes` | Descarte e ajuste de inventário |
@@ -148,7 +176,7 @@ O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 | GET/POST/PUT | `/fornecedores` | Fornecedores da filial |
 | GET | `/auditoria` | Log de auditoria (matriz) |
 | GET | `/status` | Saúde da API e do banco (público, para monitoramento) |
-| GET/POST | `/treinamentos`, `/certificados`, `/acidentes` | Demais cadastros |
+| GET/POST | `/acidentes` | Acidentes de trabalho |
 
 Todas as rotas, exceto `/ping` e `/auth/login`, exigem o cabeçalho `Authorization: Bearer <token>`.
 

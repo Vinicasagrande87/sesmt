@@ -27,9 +27,24 @@ function somarDias(dataISO, dias) {
   return data.toISOString().slice(0, 10);
 }
 
+// Soma meses mantendo o dia; se o mês não tem esse dia, usa o último (31/01 + 1 mês = 28/02)
+function somarMeses(dataISO, meses) {
+  const [a, m, d] = paraISO(dataISO).split('-').map(Number);
+  const alvo = new Date(Date.UTC(a, m - 1 + Number(meses), 1));
+  const ultimoDia = new Date(Date.UTC(alvo.getUTCFullYear(), alvo.getUTCMonth() + 1, 0)).getUTCDate();
+  alvo.setUTCDate(Math.min(d, ultimoDia));
+  return alvo.toISOString().slice(0, 10);
+}
+
+// Dias entre duas datas 'YYYY-MM-DD' (inclusive nas duas pontas)
+function diasEntre(inicioISO, fimISO) {
+  const ms = Date.parse(`${fimISO}T00:00:00Z`) - Date.parse(`${inicioISO}T00:00:00Z`);
+  return Math.round(ms / 86400000) + 1;
+}
+
 function dataValida(texto) {
   if (typeof texto !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(texto)) return false;
   return somarDias(texto, 0) === texto; // rejeita 2026-02-31, por exemplo
 }
 
-module.exports = { hoje, paraISO, somarDias, dataValida };
+module.exports = { hoje, paraISO, somarDias, somarMeses, diasEntre, dataValida };

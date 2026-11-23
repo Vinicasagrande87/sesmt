@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Presença em treinamento</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, sans-serif; background: #f4f5f7; color: #1d2330; }
+    main { max-width: 480px; margin: 0 auto; padding: 16px; }
+    h1 { font-size: 1.3rem; margin: 8px 0 16px; }
+    h2 { font-size: 1.05rem; margin: 0 0 8px; }
+    .card { background: #fff; border-radius: 10px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    label { display: block; font-weight: 600; margin: 12px 0 4px; }
+    select, input, button { width: 100%; font-size: 1rem; padding: 12px; border-radius: 8px; border: 1px solid #c9ced8; }
+    input.pin { letter-spacing: .5em; text-align: center; font-size: 1.4rem; }
+    button { border: none; background: #1f6feb; color: #fff; font-weight: 600; margin-top: 16px; cursor: pointer; }
+    button.secundario { background: #e4e7ec; color: #1d2330; }
+    button:disabled { opacity: .6; }
+    .oculto { display: none !important; }
+    .msg { padding: 12px; border-radius: 8px; margin-bottom: 16px; }
+    .ok { background: #dcf5e3; color: #11592a; }
+    .erro { background: #fde2e1; color: #8a1c17; }
+    .sub { color: #5b6270; font-size: .9rem; margin: 4px 0 0; }
+    ol { padding-left: 22px; margin: 8px 0 0; }
+    li { margin: 4px 0; }
+    .codigo { font-family: ui-monospace, monospace; color: #5b6270; }
+    nav { margin-bottom: 12px; font-size: .95rem; }
+  </style>
+</head>
+<body>
+<main>
+  <nav><a href="leitor.html">Entrega de EPI</a> · <strong>Presença em treinamento</strong></nav>
+  <h1>Presença em treinamento</h1>
+
+  <div id="mensagem" class="msg oculto" role="status"></div>
+
+  <section id="etapaLogin" class="card oculto">
+    <form id="formLogin">
+      <label for="email">E-mail</label>
+      <input id="email" type="email" autocomplete="username" required>
+      <label for="senha">Senha</label>
+      <input id="senha" type="password" autocomplete="current-password" required>
+      <button id="btnEntrar" type="submit">Entrar</button>
+    </form>
+  </section>
+
+  <p id="barraUsuario" class="oculto">Logado como <strong id="uNome"></strong> · <a href="#" id="lnkSair">Sair</a></p>
+
+  <section id="etapaTurma" class="card oculto">
+    <label for="turma">Turma de hoje</label>
+    <select id="turma"></select>
+    <button id="btnIniciar" type="button">Começar a lista de presença</button>
+  </section>
+
+  <section id="etapaLeitura" class="card oculto">
+    <h2 id="tituloTurma"></h2>
+    <p class="sub" id="subTurma"></p>
+    <p>Aponte a câmera para o crachá do participante.</p>
+    <div id="leitor"></div>
+  </section>
+
+  <section id="etapaPin" class="card oculto">
+    <h2 id="nomeParticipante"></h2>
+    <p class="sub" id="infoParticipante"></p>
+    <form id="formAssinar">
+      <label for="pin">PIN do participante</label>
+      <input id="pin" class="pin" type="password" inputmode="numeric" maxlength="6" autocomplete="off" required>
+      <button id="btnAssinar" type="submit">Assinar presença</button>
+    </form>
+    <form id="formCadastrarPin" class="oculto">
+      <p>Primeiro acesso: o participante cria um PIN de 4 a 6 números.</p>
+      <label for="pinNovo">Novo PIN</label>
+      <input id="pinNovo" class="pin" type="password" inputmode="numeric" maxlength="6" autocomplete="off" required>
+      <label for="pinConfirma">Repita o PIN</label>
+      <input id="pinConfirma" class="pin" type="password" inputmode="numeric" maxlength="6" autocomplete="off" required>
+      <button id="btnSalvarPin" type="submit">Salvar PIN</button>
+    </form>
+    <button id="btnCancelar" class="secundario" type="button">Cancelar</button>
+  </section>
+
+  <section id="etapaLista" class="card oculto">
+    <h2>Assinaram hoje (<span id="totalAssinaturas">0</span>)</h2>
+    <ol id="listaAssinaturas"></ol>
+    <button id="btnTrocarTurma" class="secundario" type="button">Trocar de turma</button>
+  </section>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  let turmaAtual = null;
+  let tokenAtual = null;
+  let leitor = null;
+  const assinaturas = [];
+
+  function mostrarMensagem(texto, tipo) { const el = $('mensagem'); el.textContent = texto; el.className = 'msg ' + tipo; }
+  function limparMensagem() { $('mensagem').className = 'msg oculto'; }
+  function exibir(id, visivel) { $(id).classList.toggle('oculto', !visivel); }
+  const dataBR = (iso) => iso ? iso.slice(0, 10).split('-').reverse().join('/') : '';
+
+  const sessao = {
+    get() { try { return JSON.parse(sessionStorage.getItem('sesmt_sessao')); } catch { return null; } },
+    set(v) { try { sessionStorage.setItem('sesmt_sessao', JSON.stringify(v)); } catch {} },
+    limpar() { try { sessionStorage.removeItem('sesmt_sessao'); } catch {} }
+  };
+  let sessaoAtual = sessao.get();
+
+  async function chamarApi(url, opcoes = {}) {
+    const headers = { ...(opcoes.headers || {}) };
+    if (sessaoAtual) headers.Authorization = 'Bearer ' + sessaoAtual.token;
+    if (opcoes.body) headers['Content-Type'] = 'application/json';
+    const resp = await fetch(url, { ...opcoes, headers });
+    const corpo = await resp.json().catch(() => ({}));
+    if (resp.status === 401 && sessaoAtual) { sair(); throw new Error(corpo.error || 'Sessão expirada'); }
+    if (!resp.ok) { const e = new Error(corpo.error || 'Erro ' + resp.status); e.codigo = corpo.codigo; throw e; }
+    return corpo;
+  }
+
+  async function sair() {
+    sessaoAtual = null;
+    sessao.limpar();
+    await pararLeitura();
+    ['barraUsuario', 'etapaTurma', 'etapaLeitura', 'etapaPin', 'etapaLista'].forEach((id) => exibir(id, false));
+    exibir('etapaLogin', true);
+  }
+
+  async function entrar() {
+    exibir('etapaLogin', false);
+    $('uNome').textContent = sessaoAtual.usuario.nome;
+    exibir('barraUsuario', true);
+    await carregarTurmas();
+  }
+
+  $('formLogin').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    $('btnEntrar').disabled = true;
+    limparMensagem();
+    try {
+      sessaoAtual = await chamarApi('/auth/login', { method: 'POST', body: JSON.stringify({ email: $('email').value, senha: $('senha').value }) });
+      sessao.set(sessaoAtual);
+      $('senha').value = '';
+      await entrar();
+    } catch (e) { mostrarMensagem(e.message, 'erro'); } finally { $('btnEntrar').disabled = false; }
+  });
+  $('lnkSair').addEventListener('click', (ev) => { ev.preventDefault(); limparMensagem(); sair(); });
+
+  // ---------- Turma ----------
+  async function carregarTurmas() {
+    const turmas = await chamarApi('/turmas?hoje=true');
+    const select = $('turma');
+    select.innerHTML = '';
+    for (const t of turmas) {
+      const op = document.createElement('option');
+      op.value = t.id;
+      op.textContent = `${t.treinamento}${t.nr ? ` (${t.nr})` : ''} · ${t.filial} · ${t.instrutor_nome}`;
+      op.dataset.turma = JSON.stringify(t);
+      select.appendChild(op);
+    }
+    $('btnIniciar').disabled = !turmas.length;
+    if (!turmas.length) mostrarMensagem('Nenhuma turma aberta para hoje. Crie a turma no sistema antes.', 'erro');
+    ['etapaLeitura', 'etapaPin', 'etapaLista'].forEach((id) => exibir(id, false));
+    exibir('etapaTurma', true);
+  }
+
+  $('btnIniciar').addEventListener('click', () => {
+    const op = $('turma').selectedOptions[0];
+    if (!op) return;
+    turmaAtual = JSON.parse(op.dataset.turma);
+    assinaturas.length = 0;
+    renderizarLista();
+    $('tituloTurma').textContent = `${turmaAtual.treinamento}${turmaAtual.nr ? ` (${turmaAtual.nr})` : ''}`;
+    $('subTurma').textContent = `${turmaAtual.filial} · ${turmaAtual.local || ''} · instrutor ${turmaAtual.instrutor_nome}`;
+    limparMensagem();
+    exibir('etapaTurma', false);
+    exibir('etapaLista', true);
+    iniciarLeitura();
+  });
+
+  $('btnTrocarTurma').addEventListener('click', async () => { await pararLeitura(); limparMensagem(); carregarTurmas(); });
+
+  // ---------- Leitura ----------
+  async function pararLeitura() {
+    if (leitor && leitor.isScanning) await leitor.stop().catch(() => {});
+  }
+
+  async function iniciarLeitura() {
+    tokenAtual = null;
+    exibir('etapaPin', false);
+    exibir('etapaLeitura', true);
+    leitor = leitor || new Html5Qrcode('leitor');
+    try {
+      await leitor.start({ facingMode: 'environment' }, { fps: 10, qrbox: 250 }, aoLerQr, () => {});
+    } catch (e) {
+      mostrarMensagem('Não foi possível abrir a câmera: ' + e + '. No celular, a página precisa ser aberta por HTTPS.', 'erro');
+    }
+  }
+
+  async function aoLerQr(texto) {
+    if (tokenAtual) return;
+    tokenAtual = texto.trim();
+    await pararLeitura();
+    try {
+      const { funcionario } = await chamarApi('/funcionarios/qr/' + encodeURIComponent(tokenAtual));
+      if (funcionario.status !== 'Ativo') throw new Error(`${funcionario.nome} está com status ${funcionario.status}`);
+      $('nomeParticipante').textContent = funcionario.nome;
+      $('infoParticipante').textContent = `Matrícula ${funcionario.matricula} · ${funcionario.cargo || ''}`;
+      $('formAssinar').reset();
+      $('formCadastrarPin').reset();
+      exibir('formAssinar', funcionario.tem_pin);
+      exibir('formCadastrarPin', !funcionario.tem_pin);
+      exibir('etapaLeitura', false);
+      exibir('etapaPin', true);
+      if (funcionario.tem_pin) $('pin').focus(); else $('pinNovo').focus();
+    } catch (e) {
+      mostrarMensagem(e.message, 'erro');
+      iniciarLeitura();
+    }
+  }
+
+  $('btnCancelar').addEventListener('click', () => { limparMensagem(); iniciarLeitura(); });
+
+  $('formCadastrarPin').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    if ($('pinNovo').value !== $('pinConfirma').value) { mostrarMensagem('Os dois PINs não conferem.', 'erro'); return; }
+    $('btnSalvarPin').disabled = true;
+    try {
+      await chamarApi('/funcionarios/qr/' + encodeURIComponent(tokenAtual) + '/pin', { method: 'POST', body: JSON.stringify({ pin: $('pinNovo').value }) });
+      mostrarMensagem('PIN cadastrado. Agora assine a presença.', 'ok');
+      exibir('formCadastrarPin', false);
+      exibir('formAssinar', true);
+      $('pin').focus();
+    } catch (e) { mostrarMensagem(e.message, 'erro'); } finally { $('btnSalvarPin').disabled = false; }
+  });
+
+  $('formAssinar').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    $('btnAssinar').disabled = true;
+    try {
+      const r = await chamarApi(`/turmas/${turmaAtual.id}/presencas`, {
+        method: 'POST', body: JSON.stringify({ token: tokenAtual, pin: $('pin').value })
+      });
+      assinaturas.unshift(r);
+      renderizarLista();
+      mostrarMensagem(`Presença de ${r.funcionario} registrada (${r.codigo_verificacao}).`, 'ok');
+      iniciarLeitura();
+    } catch (e) {
+      mostrarMensagem(e.message, 'erro');
+      $('pin').value = '';
+      if (e.codigo !== 'PIN_INCORRETO') iniciarLeitura();
+    } finally { $('btnAssinar').disabled = false; }
+  });
+
+  function renderizarLista() {
+    const ol = $('listaAssinaturas');
+    ol.innerHTML = '';
+    for (const a of assinaturas) {
+      const li = document.createElement('li');
+      li.textContent = `${a.funcionario} (${a.matricula}) `;
+      const cod = document.createElement('span');
+      cod.className = 'codigo';
+      cod.textContent = a.codigo_verificacao;
+      li.appendChild(cod);
+      ol.appendChild(li);
+    }
+    $('totalAssinaturas').textContent = assinaturas.length;
+  }
+
+  if (sessaoAtual) entrar().catch((e) => mostrarMensagem(e.message, 'erro')); else sair();
+</script>
+</body>
+</html>

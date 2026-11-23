@@ -1,8 +1,8 @@
 // Entrega de EPI com comprovação: QR do crachá + PIN pessoal (+ foto opcional), CA vigente copiado,
 // técnico, IP, aparelho, hora do servidor e código de verificação. Baixa no estoque por PEPS.
 // A entrega nunca é editada nem apagada: erro se corrige com estorno.
-const crypto = require('crypto');
 const knex = require('../database/db');
+const { gerarCodigo } = require('../utils/codigo');
 const { ErroDeNegocio } = require('../utils/erros');
 const { auditar } = require('../utils/auditoria');
 const { noEscopo, ehAdmin, podeAcessarFilial, exigirFilial } = require('../utils/escopo');
@@ -22,13 +22,6 @@ const MOTIVOS = {
   outro: 'Outro'
 };
 const FOTO_MAX_BYTES = 2 * 1024 * 1024;
-const ALFABETO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sem 0/O e 1/I/L, para não confundir
-
-function gerarCodigo() {
-  let codigo = '';
-  for (let i = 0; i < 8; i++) codigo += ALFABETO[crypto.randomInt(ALFABETO.length)];
-  return codigo;
-}
 
 function validarPedido(body) {
   if (!idValido(body.item_id)) throw new ErroDeNegocio(400, 'item_id é obrigatório');
@@ -218,35 +211,5 @@ module.exports = {
     res.set('X-Content-Type-Options', 'nosniff');
     res.set('X-Arquivo-SHA256', arquivo.sha256);
     return res.type(arquivo.tipo_mime).send(arquivo.conteudo);
-  },
-
-  // GET /verificar/:codigo — público: confirma que uma entrega existe, com o mínimo de dados pessoais
-  async verificar(req, res) {
-    const codigo = String(req.params.codigo || '').toUpperCase();
-    if (!/^[A-Z0-9]{8}$/.test(codigo)) return res.status(404).json({ valida: false });
-    const e = await knex('entregas')
-      .join('funcionarios as f', 'f.id', 'entregas.funcionario_id')
-      .join('epis', 'epis.id', 'entregas.epi_id')
-      .leftJoin('epi_itens as i', 'i.id', 'entregas.item_id')
-      .leftJoin('filiais as fi', 'fi.id', 'entregas.filial_id')
-      .leftJoin('entrega_estornos as est', 'est.entrega_id', 'entregas.id')
-      .where('entregas.codigo_verificacao', codigo)
-      .first('entregas.data_hora', 'entregas.quantidade', 'entregas.ca_numero', 'entregas.metodo_assinatura',
-        'epis.nome as epi', 'i.tamanho', 'fi.nome as filial', 'f.nome as funcionario', 'est.created_at as estornada_em');
-    if (!e) return res.status(404).json({ valida: false });
-
-    const iniciais = e.funcionario.split(/\s+/).filter(Boolean).map((p) => `${p[0].toUpperCase()}.`).join(' ');
-    return res.json({
-      valida: true,
-      codigo,
-      data_hora: e.data_hora,
-      epi: e.tamanho && e.tamanho !== 'Único' ? `${e.epi} (${e.tamanho})` : e.epi,
-      quantidade: e.quantidade,
-      ca: e.ca_numero,
-      filial: e.filial,
-      funcionario: iniciais,
-      assinatura: e.metodo_assinatura === 'qr_pin' ? 'Crachá QR + PIN pessoal' : 'Registro manual',
-      estornada: !!e.estornada_em
-    });
   }
 };

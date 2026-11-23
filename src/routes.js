@@ -18,6 +18,8 @@ const CertificadoController = require('./controllers/CertificadoController');
 const AuthController = require('./controllers/AuthController');
 const UsuarioController = require('./controllers/UsuarioController');
 const AuditoriaController = require('./controllers/AuditoriaController');
+const TurmaController = require('./controllers/TurmaController');
+const VerificacaoController = require('./controllers/VerificacaoController');
 const { autenticar, permitir } = require('./middlewares/auth');
 
 // Quem pode o quê (o filtro por filial é feito dentro de cada controller)
@@ -29,7 +31,7 @@ const cadastroPessoal = permitir('admin', 'gestor', 'tecnico', 'saude'); // ver 
 // Rotas públicas
 routes.get('/ping', (req, res) => res.json({ message: 'pong' }));
 routes.post('/auth/login', AuthController.login);
-routes.get('/verificar/:codigo', EntregaController.verificar);
+routes.get('/verificar/:codigo', VerificacaoController.verificar);
 
 // Daqui para baixo, tudo exige "Authorization: Bearer <token>".
 // Sem perfil explícito = qualquer usuário logado (somente leitura, filtrada pelas suas filiais).
@@ -112,13 +114,29 @@ routes.get('/entregas/:id/foto', EntregaController.foto);
 
 routes.get('/arquivos/:id', ArquivoController.show);
 
-// Treinamentos (catálogo da matriz) e certificados
+// Treinamentos: catálogo e exigências por função (matriz), turmas, presença e capacitações
 routes.get('/treinamentos', TreinamentoController.index);
+routes.get('/treinamentos/pendencias', CertificadoController.pendencias);
 routes.post('/treinamentos', matriz, TreinamentoController.create);
 routes.put('/treinamentos/:id', matriz, TreinamentoController.update);
+routes.get('/funcoes/:id/treinamentos', TreinamentoController.exigidosDaFuncao);
+routes.put('/funcoes/:id/treinamentos', matriz, TreinamentoController.definirExigidos);
+
+routes.get('/turmas', TurmaController.index);
+routes.get('/turmas/:id', TurmaController.show);
+routes.post('/turmas', operacao, TurmaController.create);
+routes.put('/turmas/:id', operacao, TurmaController.update);
+routes.post('/turmas/:id/presencas', operacao, TurmaController.presencaQr);
+routes.post('/turmas/:id/presencas/manual', gestao, TurmaController.presencaManual);
+routes.post('/presencas/:id/anular', gestao, TurmaController.anularPresenca);
+routes.post('/turmas/:id/cancelar', gestao, TurmaController.cancelar);
+routes.post('/turmas/:id/encerrar', operacao, TurmaController.encerrar);
+routes.get('/turmas/:id/lista-presenca', TurmaController.listaPresencaPdf);
 
 routes.get('/certificados', CertificadoController.index);
-routes.post('/certificados', operacao, CertificadoController.create);
+routes.post('/certificados', operacao, CertificadoController.createExterno);
+routes.post('/certificados/:id/anular', gestao, CertificadoController.anular);
+routes.get('/certificados/:id/pdf', CertificadoController.pdf);
 
 // Acidentes
 routes.get('/acidentes', AcidenteController.index);

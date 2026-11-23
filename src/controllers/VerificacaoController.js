@@ -1,0 +1,84 @@
+// GET /verificar/:codigo — público. Confirma que um registro existe (entrega, presença ou certificado),
+// mostrando o mínimo de dados pessoais (só as iniciais do funcionário).
+const knex = require('../database/db');
+
+const iniciais = (nome) => String(nome || '').split(/\s+/).filter(Boolean).map((p) => `${p[0].toUpperCase()}.`).join(' ');
+
+async function entrega(codigo) {
+  const e = await knex('entregas')
+    .join('funcionarios as f', 'f.id', 'entregas.funcionario_id')
+    .join('epis', 'epis.id', 'entregas.epi_id')
+    .leftJoin('epi_itens as i', 'i.id', 'entregas.item_id')
+    .leftJoin('filiais as fi', 'fi.id', 'entregas.filial_id')
+    .leftJoin('entrega_estornos as est', 'est.entrega_id', 'entregas.id')
+    .where('entregas.codigo_verificacao', codigo)
+    .first('entregas.data_hora', 'entregas.quantidade', 'entregas.ca_numero', 'entregas.metodo_assinatura',
+      'epis.nome as epi', 'i.tamanho', 'fi.nome as filial', 'f.nome as funcionario', 'est.created_at as estornada_em');
+  if (!e) return null;
+  return {
+    tipo: 'entrega_epi',
+    data_hora: e.data_hora,
+    epi: e.tamanho && e.tamanho !== 'Único' ? `${e.epi} (${e.tamanho})` : e.epi,
+    quantidade: e.quantidade,
+    ca: e.ca_numero,
+    filial: e.filial,
+    funcionario: iniciais(e.funcionario),
+    assinatura: e.metodo_assinatura === 'qr_pin' ? 'Crachá QR + PIN pessoal' : 'Registro manual',
+    estornada: !!e.estornada_em
+  };
+}
+
+async function presenca(codigo) {
+  const p = await knex('turma_presencas as p')
+    .join('funcionarios as f', 'f.id', 'p.funcionario_id')
+    .join('turmas as t', 't.id', 'p.turma_id')
+    .join('treinamentos as tr', 'tr.id', 't.treinamento_id')
+    .join('filiais as fi', 'fi.id', 't.filial_id')
+    .leftJoin('presenca_anulacoes as a', 'a.presenca_id', 'p.id')
+    .where('p.codigo_verificacao', codigo)
+    .first('p.assinado_em', 'p.data_presenca', 'p.metodo_assinatura', 'tr.nome_treinamento', 'tr.nr_referencia',
+      'fi.nome as filial', 'f.nome as funcionario', 'a.created_at as anulada_em');
+  if (!p) return null;
+  return {
+    tipo: 'presenca_treinamento',
+    data_hora: p.assinado_em,
+    data_presenca: p.data_presenca,
+    treinamento: p.nr_referencia ? `${p.nome_treinamento} (${p.nr_referencia})` : p.nome_treinamento,
+    filial: p.filial,
+    funcionario: iniciais(p.funcionario),
+    assinatura: p.metodo_assinatura === 'qr_pin' ? 'Crachá QR + PIN pessoal' : 'Registro manual',
+    anulada: !!p.anulada_em
+  };
+}
+
+async function certificado(codigo) {
+  const c = await knex('certificados_treinamentos as c')
+    .join('funcionarios as f', 'f.id', 'c.funcionario_id')
+    .join('treinamentos as tr', 'tr.id', 'c.treinamento_id')
+    .leftJoin('certificado_anulacoes as a', 'a.certificado_id', 'c.id')
+    .where('c.codigo_verificacao', codigo)
+    .first('c.data_realizacao', 'c.data_vencimento', 'c.status', 'c.carga_horaria', 'c.origem',
+      'tr.nome_treinamento', 'tr.nr_referencia', 'f.nome as funcionario', 'a.created_at as anulado_em');
+  if (!c) return null;
+  return {
+    tipo: 'certificado_treinamento',
+    treinamento: c.nr_referencia ? `${c.nome_treinamento} (${c.nr_referencia})` : c.nome_treinamento,
+    funcionario: iniciais(c.funcionario),
+    resultado: c.status,
+    carga_horaria: c.carga_horaria,
+    data_realizacao: c.data_realizacao,
+    valido_ate: c.data_vencimento,
+    origem: c.origem === 'turma' ? 'Turma interna' : 'Certificado externo',
+    anulado: !!c.anulado_em
+  };
+}
+
+module.exports = {
+  async verificar(req, res) {
+    const codigo = String(req.params.codigo || '').toUpperCase();
+    if (!/^[A-Z0-9]{8}$/.test(codigo)) return res.status(404).json({ valida: false });
+    const achado = (await entrega(codigo)) || (await presenca(codigo)) || (await certificado(codigo));
+    if (!achado) return res.status(404).json({ valida: false });
+    return res.json({ valida: true, codigo, ...achado });
+  }
+};
