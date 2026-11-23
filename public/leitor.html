@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Entrega de EPI</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, sans-serif; background: #f4f5f7; color: #1d2330; }
+    main { max-width: 480px; margin: 0 auto; padding: 16px; }
+    h1 { font-size: 1.3rem; margin: 8px 0 16px; }
+    .card { background: #fff; border-radius: 10px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    #leitor { width: 100%; }
+    label { display: block; font-weight: 600; margin: 12px 0 4px; }
+    select, input, button { width: 100%; font-size: 1rem; padding: 12px; border-radius: 8px; border: 1px solid #c9ced8; }
+    button { border: none; background: #1f6feb; color: #fff; font-weight: 600; margin-top: 16px; cursor: pointer; }
+    button.secundario { background: #e4e7ec; color: #1d2330; }
+    button:disabled { opacity: .6; }
+    .oculto { display: none; }
+    .msg { padding: 12px; border-radius: 8px; margin-bottom: 16px; }
+    .ok { background: #dcf5e3; color: #11592a; }
+    .erro { background: #fde2e1; color: #8a1c17; }
+    .vencido { color: #8a1c17; font-weight: 600; }
+    ul { padding-left: 20px; margin: 8px 0 0; }
+    .dados p { margin: 4px 0; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Entrega de EPI por QR code</h1>
+
+  <div id="mensagem" class="msg oculto"></div>
+
+  <section id="etapaLogin" class="card oculto">
+    <form id="formLogin">
+      <label for="email">E-mail</label>
+      <input id="email" type="email" autocomplete="username" required>
+      <label for="senha">Senha</label>
+      <input id="senha" type="password" autocomplete="current-password" required>
+      <button id="btnEntrar" type="submit">Entrar</button>
+    </form>
+  </section>
+
+  <p id="barraUsuario" class="oculto">Logado como <strong id="uNome"></strong> ·
+    <a href="#" id="lnkSair">Sair</a></p>
+
+  <section id="etapaLeitura" class="card oculto">
+    <p>Aponte a câmera para o QR code do crachá.</p>
+    <div id="leitor"></div>
+  </section>
+
+  <section id="etapaEntrega" class="card oculto">
+    <div class="dados">
+      <p><strong id="fNome"></strong></p>
+      <p>Matrícula: <span id="fMatricula"></span></p>
+      <p><span id="fCargo"></span> · <span id="fSetor"></span></p>
+      <p>Status: <span id="fStatus"></span></p>
+    </div>
+    <div id="vencidos" class="oculto">
+      <p class="vencido">EPIs com troca vencida:</p>
+      <ul id="listaVencidos"></ul>
+    </div>
+
+    <form id="formEntrega">
+      <label for="epi">EPI</label>
+      <select id="epi" required></select>
+
+      <label for="quantidade">Quantidade</label>
+      <input id="quantidade" type="number" min="1" step="1" value="1" required>
+
+      <button id="btnEnviar" type="submit">Registrar entrega</button>
+    </form>
+    <button id="btnNovo" class="secundario" type="button">Ler outro crachá</button>
+  </section>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  let tokenAtual = null;
+  let leitor = null;
+
+  function mostrarMensagem(texto, tipo) {
+    const el = $('mensagem');
+    el.textContent = texto;
+    el.className = 'msg ' + tipo;
+  }
+  function limparMensagem() { $('mensagem').className = 'msg oculto'; }
+
+  // JWT guardado só nesta aba (some ao fechar o navegador)
+  const sessao = {
+    get() { try { return JSON.parse(sessionStorage.getItem('sesmt_sessao')); } catch { return null; } },
+    set(v) { try { sessionStorage.setItem('sesmt_sessao', JSON.stringify(v)); } catch {} },
+    limpar() { try { sessionStorage.removeItem('sesmt_sessao'); } catch {} }
+  };
+  let sessaoAtual = sessao.get();
+
+  async function chamarApi(url, opcoes = {}) {
+    const headers = { ...(opcoes.headers || {}) };
+    if (sessaoAtual) headers.Authorization = 'Bearer ' + sessaoAtual.token;
+    const resp = await fetch(url, { ...opcoes, headers });
+    const corpo = await resp.json().catch(() => ({}));
+    if (resp.status === 401 && sessaoAtual) {
+      sair();
+      throw new Error(corpo.error || 'Sessão expirada, faça login novamente');
+    }
+    if (!resp.ok) throw new Error(corpo.error || 'Erro ' + resp.status);
+    return corpo;
+  }
+
+  async function sair() {
+    sessaoAtual = null;
+    sessao.limpar();
+    if (leitor && leitor.isScanning) await leitor.stop().catch(() => {});
+    ['etapaLeitura', 'etapaEntrega', 'barraUsuario'].forEach((id) => $(id).classList.add('oculto'));
+    $('etapaLogin').classList.remove('oculto');
+  }
+
+  async function entrarNoSistema() {
+    $('etapaLogin').classList.add('oculto');
+    $('uNome').textContent = sessaoAtual.usuario.nome;
+    $('barraUsuario').classList.remove('oculto');
+    try {
+      await carregarEpis();
+    } catch (e) {
+      mostrarMensagem('Erro ao carregar EPIs: ' + e.message, 'erro');
+      if (!sessaoAtual) return; // token inválido: já voltou para o login
+    }
+    iniciarLeitura();
+  }
+
+  $('formLogin').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const btn = $('btnEntrar');
+    btn.disabled = true;
+    limparMensagem();
+    try {
+      sessaoAtual = await chamarApi('/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: $('email').value, senha: $('senha').value })
+      });
+      sessao.set(sessaoAtual);
+      $('senha').value = '';
+      entrarNoSistema();
+    } catch (e) {
+      mostrarMensagem(e.message, 'erro');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $('lnkSair').addEventListener('click', (ev) => { ev.preventDefault(); limparMensagem(); sair(); });
+
+  async function carregarEpis() {
+    const epis = await chamarApi('/epis');
+    const select = $('epi');
+    select.innerHTML = '<option value="">Selecione...</option>';
+    for (const epi of epis) {
+      const op = document.createElement('option');
+      op.value = epi.id;
+      op.textContent = epi.ca ? `${epi.nome} (CA ${epi.ca})` : epi.nome;
+      select.appendChild(op);
+    }
+  }
+
+  async function iniciarLeitura() {
+    tokenAtual = null;
+    $('etapaEntrega').classList.add('oculto');
+    $('etapaLeitura').classList.remove('oculto');
+    leitor = leitor || new Html5Qrcode('leitor');
+    try {
+      await leitor.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: 250 },
+        aoLerQr,
+        () => {} // ignora quadros sem QR
+      );
+    } catch (e) {
+      mostrarMensagem('Não foi possível abrir a câmera: ' + e +
+        '. No celular, a página precisa ser aberta por HTTPS.', 'erro');
+    }
+  }
+
+  async function aoLerQr(texto) {
+    if (tokenAtual) return; // já processando uma leitura
+    tokenAtual = texto.trim();
+    await leitor.stop().catch(() => {});
+    limparMensagem();
+
+    try {
+      const { funcionario, epis_vencidos } =
+        await chamarApi('/funcionarios/qr/' + encodeURIComponent(tokenAtual));
+
+      $('fNome').textContent = funcionario.nome;
+      $('fMatricula').textContent = funcionario.matricula;
+      $('fCargo').textContent = funcionario.cargo;
+      $('fSetor').textContent = funcionario.setor;
+      $('fStatus').textContent = funcionario.status;
+
+      const lista = $('listaVencidos');
+      lista.innerHTML = '';
+      for (const v of epis_vencidos) {
+        const li = document.createElement('li');
+        li.textContent = `${v.epi} (venceu em ${v.data_proxima_troca.split('-').reverse().join('/')})`;
+        lista.appendChild(li);
+      }
+      $('vencidos').classList.toggle('oculto', epis_vencidos.length === 0);
+
+      const ativo = funcionario.status === 'Ativo';
+      $('btnEnviar').disabled = !ativo;
+      if (!ativo) mostrarMensagem('Funcionário não está Ativo: entrega bloqueada.', 'erro');
+
+      $('etapaLeitura').classList.add('oculto');
+      $('etapaEntrega').classList.remove('oculto');
+    } catch (e) {
+      mostrarMensagem(e.message, 'erro');
+      iniciarLeitura();
+    }
+  }
+
+  $('formEntrega').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const btn = $('btnEnviar');
+    btn.disabled = true;
+    try {
+      const r = await chamarApi('/entregas/qr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: tokenAtual,
+          epi_id: Number($('epi').value),
+          quantidade: Number($('quantidade').value)
+        })
+      });
+      mostrarMensagem(`${r.message} ${r.quantidade}x ${r.epi} para ${r.funcionario}. ` +
+        `Próxima troca: ${r.data_proxima_troca.split('-').reverse().join('/')}.`, 'ok');
+      iniciarLeitura();
+    } catch (e) {
+      mostrarMensagem(e.message, 'erro');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $('btnNovo').addEventListener('click', () => { limparMensagem(); iniciarLeitura(); });
+
+  if (sessaoAtual) entrarNoSistema(); else sair();
+</script>
+</body>
+</html>

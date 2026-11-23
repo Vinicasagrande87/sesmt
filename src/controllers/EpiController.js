@@ -14,10 +14,16 @@ module.exports = {
   // Cadastrar um novo EPI (ex: Capacete, Luva, Bota)
   async create(req, res) {
     try {
-      const { nome, descricao, validade_dias } = req.body;
+      const { nome, ca, fabricante, descricao, validade_dias } = req.body;
+
+      if (!nome || !ca || !validade_dias) {
+        return res.status(400).json({ error: 'nome, ca e validade_dias são obrigatórios' });
+      }
 
       await knex('epis').insert({
         nome,
+        ca,
+        fabricante,
         descricao,
         validade_dias
       });
