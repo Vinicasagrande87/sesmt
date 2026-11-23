@@ -8,10 +8,13 @@ const FuncaoController = require('./controllers/FuncaoController');
 const FuncionarioController = require('./controllers/FuncionarioController');
 const EpiController = require('./controllers/EpiController');
 const EntregaController = require('./controllers/EntregaController');
+const EstoqueController = require('./controllers/EstoqueController');
+const FornecedorController = require('./controllers/FornecedorController');
+const TransferenciaController = require('./controllers/TransferenciaController');
+const ArquivoController = require('./controllers/ArquivoController');
 const AcidenteController = require('./controllers/AcidenteController');
 const TreinamentoController = require('./controllers/TreinamentoController');
 const CertificadoController = require('./controllers/CertificadoController');
-const EstoqueController = require('./controllers/EstoqueController');
 const AuthController = require('./controllers/AuthController');
 const UsuarioController = require('./controllers/UsuarioController');
 const AuditoriaController = require('./controllers/AuditoriaController');
@@ -19,13 +22,14 @@ const { autenticar, permitir } = require('./middlewares/auth');
 
 // Quem pode o quê (o filtro por filial é feito dentro de cada controller)
 const matriz = permitir('admin');                                   // catálogos, filiais, usuários
-const gestao = permitir('admin', 'gestor');                         // cadastros da filial
+const gestao = permitir('admin', 'gestor');                         // cadastros da filial, ajustes e estornos
 const operacao = permitir('admin', 'gestor', 'tecnico');            // entregas, estoque, registros
 const cadastroPessoal = permitir('admin', 'gestor', 'tecnico', 'saude'); // ver ficha / QR do funcionário
 
 // Rotas públicas
 routes.get('/ping', (req, res) => res.json({ message: 'pong' }));
 routes.post('/auth/login', AuthController.login);
+routes.get('/verificar/:codigo', EntregaController.verificar);
 
 // Daqui para baixo, tudo exige "Authorization: Bearer <token>".
 // Sem perfil explícito = qualquer usuário logado (somente leitura, filtrada pelas suas filiais).
@@ -61,22 +65,52 @@ routes.put('/funcoes/:id', matriz, FuncaoController.update);
 routes.get('/funcionarios', FuncionarioController.index);
 routes.post('/funcionarios', gestao, FuncionarioController.create);
 routes.get('/funcionarios/qr/:token', operacao, FuncionarioController.buscarPorToken);
+routes.post('/funcionarios/qr/:token/pin', operacao, FuncionarioController.cadastrarPinPorQr);
 routes.get('/funcionarios/:id', FuncionarioController.show);
 routes.put('/funcionarios/:id', gestao, FuncionarioController.update);
 routes.get('/funcionarios/:id/lotacoes', FuncionarioController.lotacoes);
 routes.get('/funcionarios/:id/qrcode', cadastroPessoal, FuncionarioController.qrcode);
+routes.delete('/funcionarios/:id/pin', gestao, FuncionarioController.resetarPin);
+routes.post('/funcionarios/:id/termo', gestao, FuncionarioController.registrarTermo);
+routes.get('/funcionarios/:id/ficha-epi', FuncionarioController.fichaEpi);
 
-// EPIs (catálogo da matriz), entregas e estoque
+// Catálogo de EPIs (matriz)
 routes.get('/epis', EpiController.index);
+routes.get('/epis/:id', EpiController.show);
 routes.post('/epis', matriz, EpiController.create);
 routes.put('/epis/:id', matriz, EpiController.update);
+routes.post('/epis/:id/cas', matriz, EpiController.adicionarCa);
+routes.post('/epis/:id/itens', matriz, EpiController.adicionarItem);
+routes.put('/epi-itens/:id', matriz, EpiController.alterarItem);
 
+// Estoque por filial
+routes.get('/fornecedores', FornecedorController.index);
+routes.post('/fornecedores', gestao, FornecedorController.create);
+routes.put('/fornecedores/:id', gestao, FornecedorController.update);
+
+routes.get('/estoque/saldos', EstoqueController.saldos);
+routes.get('/estoque/disponivel', operacao, EstoqueController.disponivel);
+routes.get('/estoque/lotes', EstoqueController.lotes);
+routes.get('/estoque/movimentacoes', EstoqueController.movimentacoes);
+routes.post('/estoque/entradas', operacao, EstoqueController.entrada);
+routes.post('/estoque/descartes', operacao, EstoqueController.descarte);
+routes.post('/estoque/ajustes', gestao, EstoqueController.ajuste);
+routes.post('/estoque/movimentacoes/:id/estorno', gestao, EstoqueController.estornar);
+routes.put('/estoque/minimos', gestao, EstoqueController.definirMinimo);
+
+routes.get('/transferencias', TransferenciaController.index);
+routes.post('/transferencias', operacao, TransferenciaController.enviar);
+routes.post('/transferencias/:id/receber', operacao, TransferenciaController.receber);
+routes.post('/transferencias/:id/cancelar', operacao, TransferenciaController.cancelar);
+
+// Entregas
 routes.get('/entregas', EntregaController.index);
-routes.post('/entregas', operacao, EntregaController.create);
 routes.post('/entregas/qr', operacao, EntregaController.createPorQr);
+routes.post('/entregas', gestao, EntregaController.create);
+routes.post('/entregas/:id/estorno', gestao, EntregaController.estornar);
+routes.get('/entregas/:id/foto', EntregaController.foto);
 
-routes.get('/estoque', EstoqueController.index);
-routes.post('/estoque', operacao, EstoqueController.create);
+routes.get('/arquivos/:id', ArquivoController.show);
 
 // Treinamentos (catálogo da matriz) e certificados
 routes.get('/treinamentos', TreinamentoController.index);

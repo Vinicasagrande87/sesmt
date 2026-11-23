@@ -6,6 +6,9 @@ const { auditar } = require('../utils/auditoria');
 const { ehAdmin, noEscopo, exigirFilial, podeAcessarFilial } = require('../utils/escopo');
 const { hoje, somarDias, dataValida } = require('../utils/datas');
 const { somenteDigitos, cpfValido, pegar, exigirCampos, idValido } = require('../utils/validacao');
+const { salvarArquivo } = require('../utils/arquivos');
+const { gerarHash } = require('../services/pin');
+const { gerarFichaEpi } = require('../relatorios/fichaEpi');
 
 const STATUS = ['Ativo', 'Afastado', 'Desligado'];
 const DADOS_PESSOAIS = ['matricula', 'nome', 'cpf', 'data_nascimento', 'data_admissao'];
@@ -239,17 +242,23 @@ module.exports = {
   async buscarPorToken(req, res) {
     const funcionario = await noEscopo(consultaBase(), req, 'funcionarios.filial_id')
       .where('funcionarios.qr_token', req.params.token)
+      .select('funcionarios.pin_hash', 'funcionarios.pin_bloqueado_ate', 'funcionarios.termo_adesao_data')
       .first();
     if (!funcionario) throw new ErroDeNegocio(404, 'QR code não reconhecido');
 
     const linhas = await knex('entregas')
       .join('epis', 'epis.id', 'entregas.epi_id')
+      .leftJoin('epi_itens', 'epi_itens.id', 'entregas.item_id')
+      .leftJoin('entrega_estornos as est', 'est.entrega_id', 'entregas.id')
       .where('entregas.funcionario_id', funcionario.id)
+      .whereNull('est.id') // entrega estornada não conta
       .select(
         'entregas.id',
         'entregas.epi_id',
         'epis.nome as epi',
-        'epis.ca',
+        'epi_itens.tamanho',
+        'entregas.quantidade',
+        'entregas.ca_numero',
         'entregas.data_entrega',
         'entregas.data_proxima_troca',
         'entregas.assinatura_status'
@@ -278,12 +287,110 @@ module.exports = {
         filial: funcionario.filial,
         setor: funcionario.setor,
         cargo: funcionario.funcao,
-        status: funcionario.status
+        status: funcionario.status,
+        filial_id: funcionario.filial_id,
+        tem_pin: !!funcionario.pin_hash,
+        pin_bloqueado: !!funcionario.pin_bloqueado_ate && new Date(funcionario.pin_bloqueado_ate) > new Date(),
+        termo_adesao_data: funcionario.termo_adesao_data
       },
       entregas,
       epis_vencidos
     });
   },
 
+  // POST /funcionarios/qr/:token/pin { pin } — o próprio funcionário cadastra o PIN no aparelho do técnico.
+  // Só funciona se ainda não houver PIN: para trocar, a gestão reseta antes.
+  async cadastrarPinPorQr(req, res) {
+    const hash = await gerarHash(req.body && req.body.pin);
+    await knex.transaction(async (trx) => {
+      const funcionario = await trx('funcionarios').where({ qr_token: String(req.params.token) }).forUpdate().first('id', 'filial_id', 'pin_hash');
+      const visivel = funcionario && (funcionario.filial_id ? podeAcessarFilial(req, funcionario.filial_id) : ehAdmin(req));
+      if (!visivel) throw new ErroDeNegocio(404, 'QR code não reconhecido');
+      if (funcionario.pin_hash) throw new ErroDeNegocio(409, 'Este funcionário já tem PIN. Para trocar, peça à gestão para resetar.');
+      await trx('funcionarios').where({ id: funcionario.id })
+        .update({ pin_hash: hash, pin_definido_em: trx.fn.now(), pin_falhas: 0, pin_bloqueado_ate: null });
+      await auditar(trx, req, { acao: 'cadastrar_pin', tabela: 'funcionarios', registro_id: funcionario.id, filial_id: funcionario.filial_id });
+    });
+    return res.status(201).json({ message: 'PIN cadastrado' });
+  },
+
+  // DELETE /funcionarios/:id/pin — gestão reseta (esqueceu o PIN / suspeita de que outra pessoa sabe)
+  async resetarPin(req, res) {
+    await knex.transaction(async (trx) => {
+      const funcionario = await buscarNoEscopo(req, req.params.id, trx);
+      await trx('funcionarios').where({ id: funcionario.id })
+        .update({ pin_hash: null, pin_definido_em: null, pin_falhas: 0, pin_bloqueado_ate: null });
+      await auditar(trx, req, { acao: 'resetar_pin', tabela: 'funcionarios', registro_id: funcionario.id, filial_id: funcionario.filial_id });
+    });
+    return res.status(204).send();
+  },
+
+  // POST /funcionarios/:id/termo { data: 'AAAA-MM-DD', arquivo: base64 (PDF ou foto do termo assinado) }
+  async registrarTermo(req, res) {
+    const { data, arquivo } = req.body || {};
+    if (!data || !dataValida(data)) throw new ErroDeNegocio(400, 'data deve estar no formato AAAA-MM-DD');
+    if (data > hoje()) throw new ErroDeNegocio(400, 'data do termo não pode ser futura');
+    if (!arquivo) throw new ErroDeNegocio(400, 'Envie o termo assinado (PDF ou imagem) em arquivo');
+
+    const resultado = await knex.transaction(async (trx) => {
+      const funcionario = await buscarNoEscopo(req, req.params.id, trx);
+      const salvo = await salvarArquivo(trx, req, {
+        base64: arquivo, contexto: 'termo_adesao', tipos: ['application/pdf', 'image/jpeg', 'image/png'],
+        maxBytes: 10 * 1024 * 1024, filial_id: funcionario.filial_id, funcionario_id: funcionario.id,
+        nome: `termo-adesao-${funcionario.matricula}.${salvo_ext(arquivo)}`
+      });
+      await trx('funcionarios').where({ id: funcionario.id })
+        .update({ termo_adesao_data: data, termo_adesao_arquivo_id: salvo.id, updated_at: trx.fn.now() });
+      await auditar(trx, req, {
+        acao: 'registrar_termo', tabela: 'funcionarios', registro_id: funcionario.id, filial_id: funcionario.filial_id,
+        antes: { termo_adesao_data: funcionario.termo_adesao_data, termo_adesao_arquivo_id: funcionario.termo_adesao_arquivo_id },
+        depois: { termo_adesao_data: data, termo_adesao_arquivo_id: salvo.id, sha256: salvo.sha256 }
+      });
+      return { termo_adesao_data: data, arquivo_id: salvo.id, sha256: salvo.sha256 };
+    });
+    return res.status(201).json(resultado);
+  },
+
+  // GET /funcionarios/:id/ficha-epi — PDF da ficha de EPI (NR-6)
+  async fichaEpi(req, res) {
+    const base = await buscarNoEscopo(req, req.params.id);
+    const funcionario = await consultaBase().where('funcionarios.id', base.id)
+      .select('funcionarios.termo_adesao_data').first();
+
+    // Empregador = filial (CNPJ) atual; funcionário antigo sem filial usa dados genéricos
+    const empregador = base.filial_id
+      ? await knex('filiais').where({ id: base.filial_id }).first()
+      : { nome: 'Não informado', cnpj: '', cidade: '', uf: '' };
+
+    const entregas = await knex('entregas')
+      .join('epis', 'epis.id', 'entregas.epi_id')
+      .leftJoin('epi_itens', 'epi_itens.id', 'entregas.item_id')
+      .leftJoin('entrega_estornos as est', 'est.entrega_id', 'entregas.id')
+      .where('entregas.funcionario_id', base.id)
+      .orderBy([{ column: 'entregas.data_entrega' }, { column: 'entregas.id' }])
+      .select('entregas.*', 'epis.nome as epi', 'epi_itens.tamanho', knex.raw('(est.id is not null) as estornada'));
+
+    const pdf = gerarFichaEpi({
+      empregador,
+      funcionario: { ...funcionario, cpf: base.cpf },
+      entregas,
+      emitidoPor: req.usuario.nome,
+      mostrarCpfCompleto: ['admin', 'gestor', 'saude'].includes(req.usuario.perfil),
+      urlVerificacao: `${req.protocol}://${req.get('host')}/verificar/`
+    });
+    await auditar(knex, req, { acao: 'emitir_ficha_epi', tabela: 'funcionarios', registro_id: base.id, filial_id: base.filial_id });
+
+    res.type('application/pdf');
+    res.set('Content-Disposition', `inline; filename="ficha-epi-${base.matricula}.pdf"`);
+    pdf.pipe(res);
+  },
+
   buscarNoEscopo
 };
+
+// Extensão do arquivo pelo prefixo data: (só para o nome do arquivo)
+function salvo_ext(base64) {
+  const m = /^data:([^;]+);/.exec(base64 || '');
+  if (!m) return 'bin';
+  return { 'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png' }[m[1]] || 'bin';
+}

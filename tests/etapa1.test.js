@@ -200,13 +200,20 @@ test('escopo: cada filial só enxerga os seus funcionários', async () => {
 });
 
 test('entrega por QR respeita perfil e filial', async () => {
-  const epi = await api('POST', '/epis', { token: tk.admin, body: { nome: 'Luva nitrílica', ca: '12345', validade_dias: 30 } });
-  assert.equal(epi.status, 201);
+  const epi = await api('POST', '/epis', {
+    token: tk.admin, body: { nome: 'Luva nitrílica', validade_dias: 30, ca: { numero: '12345', validade: '2099-12-31' } }
+  });
+  assert.equal(epi.status, 201, JSON.stringify(epi.body));
   ids.epi = epi.body.id;
+  ids.item = epi.body.itens[0].id;
 
-  assert.equal((await api('POST', '/estoque', { token: tk.tecnicoA, body: { epi_id: ids.epi, tipo: 'Entrada', quantidade: 10, observacao: 'compra' } })).status, 201);
-  assert.equal((await api('POST', '/estoque', { token: tk.tecnicoA, body: { epi_id: ids.epi, tipo: 'Saída', quantidade: 99 } })).status, 409, 'saída maior que o saldo');
-  assert.equal((await api('POST', '/estoque', { token: tk.tecnicoA, body: { epi_id: ids.epi, tipo: 'Perda', quantidade: 1 } })).status, 400);
+  const entrada = await api('POST', '/estoque/entradas', {
+    token: tk.tecnicoA, body: { filial_id: ids.filialA, item_id: ids.item, quantidade: 10, valor_unitario: 3.5 }
+  });
+  assert.equal(entrada.status, 201, JSON.stringify(entrada.body));
+  assert.equal((await api('POST', '/estoque/entradas', {
+    token: tk.tecnicoA, body: { filial_id: ids.filialB, item_id: ids.item, quantidade: 10, valor_unitario: 3.5 }
+  })).status, 403, 'entrada em filial alheia');
 
   const leitura = await api('GET', `/funcionarios/qr/${ids.tokenAna}`, { token: tk.tecnicoA });
   assert.equal(leitura.status, 200);
@@ -214,12 +221,12 @@ test('entrega por QR respeita perfil e filial', async () => {
   assert.equal(leitura.body.funcionario.filial, 'Campus Guaíba');
   assert.equal(leitura.body.funcionario.cpf, undefined);
 
-  const entrega = await api('POST', '/entregas/qr', { token: tk.tecnicoA, body: { token: ids.tokenAna, epi_id: ids.epi, quantidade: 2 } });
+  assert.equal((await api('POST', `/funcionarios/qr/${ids.tokenAna}/pin`, { token: tk.tecnicoA, body: { pin: '4821' } })).status, 201);
+  const entrega = await api('POST', '/entregas/qr', { token: tk.tecnicoA, body: { token: ids.tokenAna, pin: '4821', item_id: ids.item, quantidade: 2 } });
   assert.equal(entrega.status, 201, JSON.stringify(entrega.body));
-  assert.equal(entrega.body.saldo_restante, 8);
 
-  assert.equal((await api('POST', '/entregas/qr', { token: tk.tecnicoB, body: { token: ids.tokenAna, epi_id: ids.epi } })).status, 404, 'crachá de outra filial');
-  assert.equal((await api('POST', '/entregas/qr', { token: tk.consultaAB, body: { token: ids.tokenAna, epi_id: ids.epi } })).status, 403, 'consulta não entrega');
+  assert.equal((await api('POST', '/entregas/qr', { token: tk.tecnicoB, body: { token: ids.tokenAna, pin: '4821', item_id: ids.item } })).status, 404, 'crachá de outra filial');
+  assert.equal((await api('POST', '/entregas/qr', { token: tk.consultaAB, body: { token: ids.tokenAna, pin: '4821', item_id: ids.item } })).status, 403, 'consulta não entrega');
 
   const entregasB = await api('GET', '/entregas', { token: tk.tecnicoB });
   assert.equal(entregasB.body.length, 0);
@@ -229,7 +236,7 @@ test('entrega por QR respeita perfil e filial', async () => {
 
   // EPI inativado não pode mais ser entregue
   assert.equal((await api('PUT', `/epis/${ids.epi}`, { token: tk.admin, body: { ativo: false } })).status, 200);
-  assert.equal((await api('POST', '/entregas/qr', { token: tk.tecnicoA, body: { token: ids.tokenAna, epi_id: ids.epi } })).status, 404);
+  assert.equal((await api('POST', '/entregas/qr', { token: tk.tecnicoA, body: { token: ids.tokenAna, pin: '4821', item_id: ids.item } })).status, 404);
   await api('PUT', `/epis/${ids.epi}`, { token: tk.admin, body: { ativo: true } });
 });
 
@@ -284,8 +291,10 @@ test('desligamento: não apaga, bloqueia entrega e fecha a lotação', async () 
   const lot = (await api('GET', `/funcionarios/${ids.bruno}/lotacoes`, { token: tk.admin })).body;
   assert.equal(lot[0].fim, '2026-10-31');
 
-  const entrega = await api('POST', '/entregas/qr', { token: tk.tecnicoB, body: { token: ids.tokenBruno, epi_id: ids.epi } });
+  await amb.knex('funcionarios').where({ id: ids.bruno }).update({ pin_hash: await require('bcryptjs').hash('7395', 4) });
+  const entrega = await api('POST', '/entregas/qr', { token: tk.tecnicoB, body: { token: ids.tokenBruno, pin: '7395', item_id: ids.item } });
   assert.equal(entrega.status, 409);
+  assert.match(entrega.body.error, /Desligado/);
 
   assert.equal((await api('PUT', `/funcionarios/${ids.bruno}`, { token: tk.admin, body: { status: 'Sumido' } })).status, 400);
 

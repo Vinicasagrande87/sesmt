@@ -10,27 +10,35 @@
     body { margin: 0; font-family: system-ui, sans-serif; background: #f4f5f7; color: #1d2330; }
     main { max-width: 480px; margin: 0 auto; padding: 16px; }
     h1 { font-size: 1.3rem; margin: 8px 0 16px; }
+    h2 { font-size: 1.05rem; margin: 0 0 8px; }
     .card { background: #fff; border-radius: 10px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
     #leitor { width: 100%; }
     label { display: block; font-weight: 600; margin: 12px 0 4px; }
     select, input, button { width: 100%; font-size: 1rem; padding: 12px; border-radius: 8px; border: 1px solid #c9ced8; }
+    input.pin { letter-spacing: .5em; text-align: center; font-size: 1.4rem; }
     button { border: none; background: #1f6feb; color: #fff; font-weight: 600; margin-top: 16px; cursor: pointer; }
     button.secundario { background: #e4e7ec; color: #1d2330; }
     button:disabled { opacity: .6; }
-    .oculto { display: none; }
+    .oculto { display: none !important; }
     .msg { padding: 12px; border-radius: 8px; margin-bottom: 16px; }
     .ok { background: #dcf5e3; color: #11592a; }
     .erro { background: #fde2e1; color: #8a1c17; }
+    .aviso { background: #fff4d6; color: #6b4e00; padding: 10px 12px; border-radius: 8px; margin-top: 12px; }
     .vencido { color: #8a1c17; font-weight: 600; }
+    .codigo { font-family: ui-monospace, monospace; font-size: 1.3rem; letter-spacing: .15em; }
     ul { padding-left: 20px; margin: 8px 0 0; }
     .dados p { margin: 4px 0; }
+    .foto { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+    .foto img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; }
+    .foto button { margin-top: 0; }
+    video { width: 100%; border-radius: 8px; background: #000; }
   </style>
 </head>
 <body>
 <main>
-  <h1>Entrega de EPI por QR code</h1>
+  <h1>Entrega de EPI</h1>
 
-  <div id="mensagem" class="msg oculto"></div>
+  <div id="mensagem" class="msg oculto" role="status"></div>
 
   <section id="etapaLogin" class="card oculto">
     <form id="formLogin">
@@ -50,11 +58,11 @@
     <div id="leitor"></div>
   </section>
 
-  <section id="etapaEntrega" class="card oculto">
+  <section id="etapaFuncionario" class="card oculto">
     <div class="dados">
       <p><strong id="fNome"></strong></p>
       <p>Matrícula: <span id="fMatricula"></span></p>
-      <p><span id="fFilial"></span></p>
+      <p id="fFilial"></p>
       <p><span id="fCargo"></span> · <span id="fSetor"></span></p>
       <p>Status: <span id="fStatus"></span></p>
     </div>
@@ -62,31 +70,88 @@
       <p class="vencido">EPIs com troca vencida:</p>
       <ul id="listaVencidos"></ul>
     </div>
+    <p id="avisoTermo" class="aviso oculto">Termo de adesão à assinatura eletrônica não registrado.
+      A entrega vale, mas peça à gestão para registrar o termo.</p>
+  </section>
 
+  <!-- Primeiro acesso: o próprio funcionário cria o PIN -->
+  <section id="etapaPin" class="card oculto">
+    <h2>Cadastro do PIN</h2>
+    <p>Entregue o aparelho ao funcionário: ele cria um PIN de 4 a 6 números, que funciona como a assinatura dele.</p>
+    <form id="formPin">
+      <label for="pinNovo">Novo PIN</label>
+      <input id="pinNovo" class="pin" type="password" inputmode="numeric" pattern="\d{4,6}" maxlength="6" autocomplete="off" required>
+      <label for="pinConfirma">Repita o PIN</label>
+      <input id="pinConfirma" class="pin" type="password" inputmode="numeric" pattern="\d{4,6}" maxlength="6" autocomplete="off" required>
+      <button id="btnSalvarPin" type="submit">Salvar PIN</button>
+    </form>
+  </section>
+
+  <section id="etapaEntrega" class="card oculto">
     <form id="formEntrega">
-      <label for="epi">EPI</label>
-      <select id="epi" required></select>
+      <label for="item">EPI</label>
+      <select id="item" required></select>
+
+      <label for="motivo">Motivo</label>
+      <select id="motivo" required>
+        <option value="troca_periodica">Troca periódica</option>
+        <option value="primeira_entrega">Primeira entrega</option>
+        <option value="desgaste">Desgaste/dano</option>
+        <option value="perda">Perda/extravio</option>
+        <option value="outro">Outro</option>
+      </select>
+      <div id="campoObs" class="oculto">
+        <label for="observacao">Descreva o motivo</label>
+        <input id="observacao" type="text" maxlength="300">
+      </div>
 
       <label for="quantidade">Quantidade</label>
       <input id="quantidade" type="number" min="1" step="1" value="1" required>
 
+      <div class="foto">
+        <img id="fotoMiniatura" class="oculto" alt="Foto da entrega">
+        <button id="btnFoto" class="secundario" type="button">📷 Foto da entrega (opcional)</button>
+      </div>
+      <div id="camera" class="oculto">
+        <video id="video" playsinline autoplay muted></video>
+        <button id="btnCapturar" type="button">Capturar</button>
+      </div>
+
+      <label for="pin">PIN do funcionário</label>
+      <input id="pin" class="pin" type="password" inputmode="numeric" maxlength="6" autocomplete="off" required>
+
       <button id="btnEnviar" type="submit">Registrar entrega</button>
     </form>
-    <button id="btnNovo" class="secundario" type="button">Ler outro crachá</button>
   </section>
+
+  <section id="etapaComprovante" class="card oculto">
+    <h2>Entrega registrada ✔</h2>
+    <p id="resumo"></p>
+    <p>Código de verificação:<br><span id="codigo" class="codigo"></span></p>
+  </section>
+
+  <button id="btnNovo" class="secundario oculto" type="button">Ler outro crachá</button>
 </main>
 
 <script>
   const $ = (id) => document.getElementById(id);
+  const ETAPAS = ['etapaLeitura', 'etapaFuncionario', 'etapaPin', 'etapaEntrega', 'etapaComprovante', 'btnNovo'];
   let tokenAtual = null;
+  let funcionarioAtual = null;
+  let fotoAtual = null;
   let leitor = null;
+  let streamCamera = null;
 
+  function mostrar(...ids) {
+    for (const id of ETAPAS) $(id).classList.toggle('oculto', !ids.includes(id));
+  }
   function mostrarMensagem(texto, tipo) {
     const el = $('mensagem');
     el.textContent = texto;
     el.className = 'msg ' + tipo;
   }
   function limparMensagem() { $('mensagem').className = 'msg oculto'; }
+  const dataBR = (iso) => iso ? iso.slice(0, 10).split('-').reverse().join('/') : '';
 
   // JWT guardado só nesta aba (some ao fechar o navegador)
   const sessao = {
@@ -99,13 +164,18 @@
   async function chamarApi(url, opcoes = {}) {
     const headers = { ...(opcoes.headers || {}) };
     if (sessaoAtual) headers.Authorization = 'Bearer ' + sessaoAtual.token;
+    if (opcoes.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
     const resp = await fetch(url, { ...opcoes, headers });
     const corpo = await resp.json().catch(() => ({}));
     if (resp.status === 401 && sessaoAtual) {
       sair();
       throw new Error(corpo.error || 'Sessão expirada, faça login novamente');
     }
-    if (!resp.ok) throw new Error(corpo.error || 'Erro ' + resp.status);
+    if (!resp.ok) {
+      const erro = new Error(corpo.error || 'Erro ' + resp.status);
+      erro.codigo = corpo.codigo;
+      throw erro;
+    }
     return corpo;
   }
 
@@ -113,32 +183,26 @@
     sessaoAtual = null;
     sessao.limpar();
     if (leitor && leitor.isScanning) await leitor.stop().catch(() => {});
-    ['etapaLeitura', 'etapaEntrega', 'barraUsuario'].forEach((id) => $(id).classList.add('oculto'));
+    pararCamera();
+    mostrar();
+    $('barraUsuario').classList.add('oculto');
     $('etapaLogin').classList.remove('oculto');
   }
 
-  async function entrarNoSistema() {
+  function entrarNoSistema() {
     $('etapaLogin').classList.add('oculto');
     $('uNome').textContent = sessaoAtual.usuario.nome;
     $('barraUsuario').classList.remove('oculto');
-    try {
-      await carregarEpis();
-    } catch (e) {
-      mostrarMensagem('Erro ao carregar EPIs: ' + e.message, 'erro');
-      if (!sessaoAtual) return; // token inválido: já voltou para o login
-    }
     iniciarLeitura();
   }
 
   $('formLogin').addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    const btn = $('btnEntrar');
-    btn.disabled = true;
+    $('btnEntrar').disabled = true;
     limparMensagem();
     try {
       sessaoAtual = await chamarApi('/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: $('email').value, senha: $('senha').value })
       });
       sessao.set(sessaoAtual);
@@ -147,39 +211,22 @@
     } catch (e) {
       mostrarMensagem(e.message, 'erro');
     } finally {
-      btn.disabled = false;
+      $('btnEntrar').disabled = false;
     }
   });
-
   $('lnkSair').addEventListener('click', (ev) => { ev.preventDefault(); limparMensagem(); sair(); });
 
-  async function carregarEpis() {
-    const epis = await chamarApi('/epis');
-    const select = $('epi');
-    select.innerHTML = '<option value="">Selecione...</option>';
-    for (const epi of epis) {
-      const op = document.createElement('option');
-      op.value = epi.id;
-      op.textContent = epi.ca ? `${epi.nome} (CA ${epi.ca})` : epi.nome;
-      select.appendChild(op);
-    }
-  }
-
+  // ---------- Leitura do crachá ----------
   async function iniciarLeitura() {
     tokenAtual = null;
-    $('etapaEntrega').classList.add('oculto');
-    $('etapaLeitura').classList.remove('oculto');
+    funcionarioAtual = null;
+    limparFoto();
+    mostrar('etapaLeitura');
     leitor = leitor || new Html5Qrcode('leitor');
     try {
-      await leitor.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: 250 },
-        aoLerQr,
-        () => {} // ignora quadros sem QR
-      );
+      await leitor.start({ facingMode: 'environment' }, { fps: 10, qrbox: 250 }, aoLerQr, () => {});
     } catch (e) {
-      mostrarMensagem('Não foi possível abrir a câmera: ' + e +
-        '. No celular, a página precisa ser aberta por HTTPS.', 'erro');
+      mostrarMensagem('Não foi possível abrir a câmera: ' + e + '. No celular, a página precisa ser aberta por HTTPS.', 'erro');
     }
   }
 
@@ -188,64 +235,165 @@
     tokenAtual = texto.trim();
     await leitor.stop().catch(() => {});
     limparMensagem();
-
     try {
-      const { funcionario, epis_vencidos } =
-        await chamarApi('/funcionarios/qr/' + encodeURIComponent(tokenAtual));
-
-      $('fNome').textContent = funcionario.nome;
-      $('fMatricula').textContent = funcionario.matricula;
-      $('fFilial').textContent = funcionario.filial || '';
-      $('fCargo').textContent = funcionario.cargo;
-      $('fSetor').textContent = funcionario.setor;
-      $('fStatus').textContent = funcionario.status;
-
-      const lista = $('listaVencidos');
-      lista.innerHTML = '';
-      for (const v of epis_vencidos) {
-        const li = document.createElement('li');
-        li.textContent = `${v.epi} (venceu em ${v.data_proxima_troca.split('-').reverse().join('/')})`;
-        lista.appendChild(li);
-      }
-      $('vencidos').classList.toggle('oculto', epis_vencidos.length === 0);
-
-      const ativo = funcionario.status === 'Ativo';
-      $('btnEnviar').disabled = !ativo;
-      if (!ativo) mostrarMensagem('Funcionário não está Ativo: entrega bloqueada.', 'erro');
-
-      $('etapaLeitura').classList.add('oculto');
-      $('etapaEntrega').classList.remove('oculto');
+      await carregarFuncionario();
     } catch (e) {
       mostrarMensagem(e.message, 'erro');
       iniciarLeitura();
     }
   }
 
+  async function carregarFuncionario() {
+    const { funcionario, epis_vencidos } = await chamarApi('/funcionarios/qr/' + encodeURIComponent(tokenAtual));
+    funcionarioAtual = funcionario;
+
+    $('fNome').textContent = funcionario.nome;
+    $('fMatricula').textContent = funcionario.matricula;
+    $('fFilial').textContent = funcionario.filial || '';
+    $('fCargo').textContent = funcionario.cargo || '';
+    $('fSetor').textContent = funcionario.setor || '';
+    $('fStatus').textContent = funcionario.status;
+
+    const lista = $('listaVencidos');
+    lista.innerHTML = '';
+    for (const v of epis_vencidos) {
+      const li = document.createElement('li');
+      li.textContent = `${v.epi} (venceu em ${dataBR(v.data_proxima_troca)})`;
+      lista.appendChild(li);
+    }
+    $('vencidos').classList.toggle('oculto', epis_vencidos.length === 0);
+    $('avisoTermo').classList.toggle('oculto', !!funcionario.termo_adesao_data);
+
+    if (funcionario.status !== 'Ativo') {
+      mostrar('etapaFuncionario', 'btnNovo');
+      mostrarMensagem('Funcionário não está Ativo: entrega bloqueada.', 'erro');
+      return;
+    }
+    if (!funcionario.tem_pin) {
+      $('formPin').reset();
+      mostrar('etapaFuncionario', 'etapaPin', 'btnNovo');
+      return;
+    }
+    if (funcionario.pin_bloqueado) {
+      mostrarMensagem('PIN bloqueado por tentativas erradas. Aguarde ou peça à gestão para resetar.', 'erro');
+    }
+    await carregarItens(funcionario.filial_id);
+    $('formEntrega').reset();
+    $('campoObs').classList.add('oculto');
+    mostrar('etapaFuncionario', 'etapaEntrega', 'btnNovo');
+  }
+
+  async function carregarItens(filialId) {
+    const itens = await chamarApi('/estoque/disponivel?filial_id=' + encodeURIComponent(filialId));
+    const select = $('item');
+    select.innerHTML = '';
+    const vazio = document.createElement('option');
+    vazio.value = '';
+    vazio.textContent = itens.length ? 'Selecione...' : 'Nenhum EPI com saldo nesta filial';
+    select.appendChild(vazio);
+    for (const i of itens) {
+      const op = document.createElement('option');
+      op.value = i.item_id;
+      const tamanho = i.tamanho && i.tamanho !== 'Único' ? ` ${i.tamanho}` : '';
+      const ca = i.ca_vigente ? `CA ${i.ca_vigente.numero}` : 'CA VENCIDO';
+      op.textContent = `${i.epi}${tamanho} · saldo ${i.saldo} · ${ca}`;
+      op.disabled = !i.ca_vigente;
+      select.appendChild(op);
+    }
+  }
+
+  // ---------- PIN (primeiro acesso) ----------
+  $('formPin').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    if ($('pinNovo').value !== $('pinConfirma').value) {
+      mostrarMensagem('Os dois PINs não conferem.', 'erro');
+      return;
+    }
+    $('btnSalvarPin').disabled = true;
+    try {
+      await chamarApi('/funcionarios/qr/' + encodeURIComponent(tokenAtual) + '/pin', {
+        method: 'POST', body: JSON.stringify({ pin: $('pinNovo').value })
+      });
+      mostrarMensagem('PIN cadastrado. Devolva o aparelho ao técnico.', 'ok');
+      await carregarFuncionario();
+    } catch (e) {
+      mostrarMensagem(e.message, 'erro');
+    } finally {
+      $('btnSalvarPin').disabled = false;
+    }
+  });
+
+  // ---------- Foto (opcional), reduzida antes de enviar ----------
+  function limparFoto() {
+    fotoAtual = null;
+    $('fotoMiniatura').classList.add('oculto');
+    $('fotoMiniatura').removeAttribute('src');
+  }
+  function pararCamera() {
+    if (streamCamera) streamCamera.getTracks().forEach((t) => t.stop());
+    streamCamera = null;
+    $('camera').classList.add('oculto');
+  }
+  $('btnFoto').addEventListener('click', async () => {
+    try {
+      streamCamera = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      $('video').srcObject = streamCamera;
+      $('camera').classList.remove('oculto');
+    } catch (e) {
+      mostrarMensagem('Não foi possível abrir a câmera para a foto: ' + e.message, 'erro');
+    }
+  });
+  $('btnCapturar').addEventListener('click', () => {
+    const video = $('video');
+    const escala = Math.min(1, 800 / Math.max(video.videoWidth, video.videoHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(video.videoWidth * escala);
+    canvas.height = Math.round(video.videoHeight * escala);
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+    fotoAtual = canvas.toDataURL('image/jpeg', 0.7);
+    $('fotoMiniatura').src = fotoAtual;
+    $('fotoMiniatura').classList.remove('oculto');
+    pararCamera();
+  });
+
+  // ---------- Entrega ----------
+  $('motivo').addEventListener('change', () => {
+    $('campoObs').classList.toggle('oculto', $('motivo').value !== 'outro');
+  });
+
   $('formEntrega').addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const btn = $('btnEnviar');
     btn.disabled = true;
+    limparMensagem();
     try {
       const r = await chamarApi('/entregas/qr', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           token: tokenAtual,
-          epi_id: Number($('epi').value),
-          quantidade: Number($('quantidade').value)
+          pin: $('pin').value,
+          item_id: Number($('item').value),
+          quantidade: Number($('quantidade').value),
+          motivo: $('motivo').value,
+          observacao: $('observacao').value || undefined,
+          foto: fotoAtual || undefined
         })
       });
-      mostrarMensagem(`${r.message} ${r.quantidade}x ${r.epi} para ${r.funcionario}. ` +
-        `Próxima troca: ${r.data_proxima_troca.split('-').reverse().join('/')}.`, 'ok');
-      iniciarLeitura();
+      const tamanho = r.tamanho && r.tamanho !== 'Único' ? ` ${r.tamanho}` : '';
+      $('resumo').textContent = `${r.quantidade}x ${r.epi}${tamanho} (CA ${r.ca.numero}) para ${r.funcionario}. ` +
+        `Próxima troca: ${dataBR(r.data_proxima_troca)}.`;
+      $('codigo').textContent = r.codigo_verificacao;
+      mostrar('etapaComprovante', 'btnNovo');
+      limparFoto();
     } catch (e) {
       mostrarMensagem(e.message, 'erro');
+      if (e.codigo === 'PIN_INCORRETO' || e.codigo === 'PIN_BLOQUEADO') $('pin').value = '';
     } finally {
       btn.disabled = false;
     }
   });
 
-  $('btnNovo').addEventListener('click', () => { limparMensagem(); iniciarLeitura(); });
+  $('btnNovo').addEventListener('click', () => { limparMensagem(); pararCamera(); iniciarLeitura(); });
 
   if (sessaoAtual) entrarNoSistema(); else sair();
 </script>

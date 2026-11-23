@@ -6,13 +6,13 @@ const { auditar } = require('../utils/auditoria');
 const { noEscopo, exigirFilial } = require('../utils/escopo');
 const { pegar, exigirCampos, idValido, somenteDigitos } = require('../utils/validacao');
 
-module.exports = function cadastroDaFilial({ tabela, nome, campos, obrigatorios }) {
+module.exports = function cadastroDaFilial({ tabela, nome, campos, obrigatorios, validarExtra }) {
   function normalizar(dados) {
     if (dados.cep) {
       dados.cep = somenteDigitos(dados.cep);
       if (dados.cep.length !== 8) throw new ErroDeNegocio(400, 'CEP deve ter 8 dígitos');
     }
-    return dados;
+    return validarExtra ? validarExtra(dados) : dados;
   }
 
   return {

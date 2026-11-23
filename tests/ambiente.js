@@ -18,22 +18,38 @@ function portaLivre() {
   });
 }
 
-async function iniciarAmbiente() {
+// Sobe o Postgres temporário; se a porta escolhida for tomada no meio do caminho, tenta de novo com outra
+async function subirPostgres() {
   const { default: EmbeddedPostgres } = await import('embedded-postgres');
-  const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'sesmt-pg-'));
-  const porta = await portaLivre();
-  const pg = new EmbeddedPostgres({
-    databaseDir: pasta,
-    port: porta,
-    user: 'postgres',
-    password: 'postgres',
-    persistent: false,
-    onLog: () => {},
-    onError: () => {}
-  });
-  await pg.initialise();
-  await pg.start();
-  await pg.createDatabase('sesmt_test');
+  let ultimoErro;
+  for (let tentativa = 1; tentativa <= 3; tentativa++) {
+    const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'sesmt-pg-'));
+    const porta = await portaLivre();
+    const pg = new EmbeddedPostgres({
+      databaseDir: pasta,
+      port: porta,
+      user: 'postgres',
+      password: 'postgres',
+      persistent: false,
+      onLog: () => {},
+      onError: () => {}
+    });
+    try {
+      await pg.initialise();
+      await pg.start();
+      await pg.createDatabase('sesmt_test');
+      return { pg, pasta, porta };
+    } catch (erro) {
+      ultimoErro = erro;
+      await pg.stop().catch(() => {});
+      fs.rmSync(pasta, { recursive: true, force: true });
+    }
+  }
+  throw ultimoErro;
+}
+
+async function iniciarAmbiente() {
+  const { pg, pasta, porta } = await subirPostgres();
 
   // Precisa estar definido antes de carregar o knexfile/db.js
   process.env.NODE_ENV = 'test';

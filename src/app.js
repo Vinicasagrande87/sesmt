@@ -11,7 +11,9 @@ const app = express();
 
 app.set('trust proxy', 1); // atrás do proxy HTTPS da nuvem: req.ip passa a ser o IP real
 app.use(cors());
-app.use(express.json());
+// Corpo maior só nas rotas que recebem arquivo (foto da entrega, termo de adesão); o resto fica pequeno
+app.use(['/entregas', '/funcionarios/:id/termo'], express.json({ limit: '15mb' }));
+app.use(express.json({ limit: '200kb' }));
 
 // Arquivos estáticos (ex.: /leitor.html)
 app.use(express.static(path.join(__dirname, '..', 'public')));

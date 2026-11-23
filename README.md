@@ -16,11 +16,34 @@ A ideia é usar o conhecimento técnico da área para construir uma ferramenta q
 
 ## O que já funciona
 
-- **Entrega de EPI por QR code.** Cada funcionário tem um QR no crachá, que contém só uma chave aleatória (nunca CPF ou id). O técnico lê o QR pelo celular, vê os dados do funcionário e os EPIs com troca vencida, escolhe o EPI e registra a entrega.
-- **Baixa automática no estoque,** feita numa transação com trava de linha: duas entregas simultâneas não conseguem usar o mesmo saldo.
-- **Cálculo da próxima troca** a partir da periodicidade do EPI, com datas no fuso de São Paulo.
-- **Bloqueios de regra de negócio:** funcionário inativo, saldo insuficiente ou EPI inexistente geram respostas 4xx claras.
-- **Leitor web** ([public/leitor.html](public/leitor.html)) com login e acesso à câmera traseira do celular.
+### Entrega de EPI com valor de prova
+
+- **Assinatura por crachá QR + PIN pessoal.** O QR contém só uma chave aleatória (nunca CPF ou id). O funcionário cria o próprio PIN no primeiro acesso.
+  - O PIN é guardado só como hash, e PINs fracos (1234, 1111) são recusados.
+  - Após 5 tentativas erradas, o PIN fica bloqueado por 15 minutos.
+- **Cada entrega grava as provas:**
+  - CA vigente copiado para o registro, com bloqueio se o CA estiver vencido;
+  - motivo, técnico, hora do servidor, IP e aparelho;
+  - filial, setor e função do funcionário na data;
+  - foto opcional, com SHA-256;
+  - se havia termo de adesão naquele momento;
+  - um código de verificação.
+- **Verificação pública:** `/verificar/<código>` confirma que a entrega existe, mostrando só as iniciais do funcionário.
+- **Termo de adesão à assinatura eletrônica:** o documento assinado é anexado (PDF ou foto), com hash.
+- **Ficha de EPI em PDF (NR-6):** empregador, empregado, declaração, todas as entregas e o código de cada uma.
+- **Leitor web** ([public/leitor.html](public/leitor.html)) para celular. Faz login, lê o crachá, cadastra o PIN, mostra só os EPIs com saldo e CA válido, tira a foto (reduzida antes do envio) e exibe o comprovante.
+
+### Estoque com custo histórico
+
+- **Estoque por filial, em lotes:** cada compra guarda o preço pago, o fornecedor, a nota (opcional) e a validade.
+- **Custo pelo método PEPS:** cada saída usa o preço do lote de onde saiu. Se sobraram 10 luvas compradas em 2020 a R$ 2 e chegaram outras em 2026 a R$ 5, a entrega de 15 custa 10 × R$ 2 + 5 × R$ 5, e não 15 × a média. O valor gravado nunca muda depois.
+- **Movimentações imutáveis:** entrada, entrega, descarte, ajuste de inventário e transferência. Erro se corrige com **estorno**, que devolve ao mesmo lote com o mesmo custo.
+- **Lotes vencidos** não são entregues: aparecem separados no saldo, para descarte.
+- **Transferência entre filiais:** a origem envia e o destino confirma o recebimento. O custo e a validade do lote original acompanham o material.
+- **Saldos valorizados e alerta de estoque mínimo** por filial.
+- **Concorrência segura:** os lotes são travados durante a saída, então duas entregas simultâneas não usam o mesmo saldo (há teste para isso).
+
+### Estrutura e controle
 - **Estrutura multi-filial:** matriz → filiais (cada uma com CNPJ próprio, UF, cidade e bairro) → prédios e setores. Funções num catálogo único do grupo.
 - **Permissões por perfil e por filial:**
 
@@ -46,22 +69,18 @@ A ideia é usar o conhecimento técnico da área para construir uma ferramenta q
 O modelo completo está sendo desenhado junto com a rotina real de um SESMT com várias filiais:
 
 1. ~~**Estrutura multi-filial** com permissões por filial~~ ✅ concluída
-2. **EPI com valor jurídico:**
-   - assinatura por QR + PIN + foto;
-   - CA vigente copiado na entrega (a entrega é bloqueada se o CA estiver vencido);
-   - ficha de EPI em PDF.
-3. **Estoque com custo histórico:** lotes com o preço pago em cada compra e custo das saídas pelo método PEPS. Os relatórios somam valores gravados no momento da movimentação, nunca o preço atual.
-4. **Treinamentos:** exigências por função e lista de presença assinada com o crachá.
-5. **ASOs (PCMSO):** controle de vencimentos, com acesso restrito aos dados de saúde (LGPD).
-6. **PPCI por prédio:**
+2. ~~**EPI com valor jurídico** e **estoque com custo histórico (PEPS)**~~ ✅ concluída
+3. **Treinamentos:** exigências por função e lista de presença assinada com o crachá.
+4. **ASOs (PCMSO):** controle de vencimentos, com acesso restrito aos dados de saúde (LGPD).
+5. **PPCI por prédio:**
    - projeto aprovado e alvará;
    - comparação entre o que o projeto prevê e o que está instalado;
    - manutenção de extintores e inspeção mensal por QR no equipamento.
-7. **Relatórios em todas as áreas:**
+6. **Relatórios em todas as áreas:**
    - exportação em PDF e Excel, com código de verificação;
    - consulta da situação "como estava em uma data";
    - painel de conformidade.
-8. **Registros imutáveis:** correção por estorno, encadeamento por hash e fechamento mensal, para servir de prova.
+7. **Encadeamento por hash e fechamento mensal:** reforça a prova de que nada foi alterado. A correção por estorno já está pronta.
 
 ## Tecnologias
 
@@ -110,9 +129,23 @@ O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 | GET | `/funcionarios/:id/lotacoes` | Histórico de filial/setor/função |
 | GET | `/funcionarios/:id/qrcode` | PNG do QR do crachá |
 | GET | `/funcionarios/qr/:token` | Dados do funcionário, entregas e EPIs vencidos |
-| GET/POST/PUT | `/epis` | Catálogo de EPIs (matriz) |
-| POST | `/entregas/qr` | Entrega por QR code, com baixa de estoque |
-| GET/POST | `/estoque` | Movimentações de estoque |
+| GET/POST/PUT | `/epis` | Catálogo de EPIs com tamanhos e CA (matriz) |
+| POST | `/epis/:id/cas`, `/epis/:id/itens` | Renovação de CA e novos tamanhos (matriz) |
+| POST | `/funcionarios/qr/:token/pin` | Funcionário cadastra o próprio PIN (primeiro acesso) |
+| DELETE | `/funcionarios/:id/pin` | Gestão reseta o PIN |
+| POST | `/funcionarios/:id/termo` | Termo de adesão assinado (PDF/foto) |
+| GET | `/funcionarios/:id/ficha-epi` | Ficha de EPI em PDF |
+| POST | `/entregas/qr` | Entrega por QR + PIN (+ foto), baixa PEPS |
+| POST | `/entregas` | Entrega manual com justificativa (gestão) |
+| POST | `/entregas/:id/estorno` | Estorno de entrega (gestão) |
+| GET | `/verificar/:codigo` | Verificação pública de uma entrega |
+| POST | `/estoque/entradas` | Entrada de lote com preço pago |
+| GET | `/estoque/saldos`, `/estoque/lotes`, `/estoque/movimentacoes` | Saldos valorizados, lotes e extrato |
+| POST | `/estoque/descartes`, `/estoque/ajustes` | Descarte e ajuste de inventário |
+| POST | `/estoque/movimentacoes/:id/estorno` | Estorno de entrada, descarte ou ajuste |
+| PUT | `/estoque/minimos` | Estoque mínimo por filial |
+| GET/POST | `/transferencias` (+ `/receber`, `/cancelar`) | Transferência entre filiais |
+| GET/POST/PUT | `/fornecedores` | Fornecedores da filial |
 | GET | `/auditoria` | Log de auditoria (matriz) |
 | GET | `/status` | Saúde da API e do banco (público, para monitoramento) |
 | GET/POST | `/treinamentos`, `/certificados`, `/acidentes` | Demais cadastros |
