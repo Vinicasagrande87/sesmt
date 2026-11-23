@@ -54,6 +54,7 @@
     <div class="dados">
       <p><strong id="fNome"></strong></p>
       <p>Matrícula: <span id="fMatricula"></span></p>
+      <p><span id="fFilial"></span></p>
       <p><span id="fCargo"></span> · <span id="fSetor"></span></p>
       <p>Status: <span id="fStatus"></span></p>
     </div>
@@ -194,6 +195,7 @@
 
       $('fNome').textContent = funcionario.nome;
       $('fMatricula').textContent = funcionario.matricula;
+      $('fFilial').textContent = funcionario.filial || '';
       $('fCargo').textContent = funcionario.cargo;
       $('fSetor').textContent = funcionario.setor;
       $('fStatus').textContent = funcionario.status;

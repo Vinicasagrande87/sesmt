@@ -20,14 +20,32 @@ A ideia é usar o conhecimento técnico da área para construir uma ferramenta q
 - **Baixa automática no estoque,** feita numa transação com trava de linha: duas entregas simultâneas não conseguem usar o mesmo saldo.
 - **Cálculo da próxima troca** a partir da periodicidade do EPI, com datas no fuso de São Paulo.
 - **Bloqueios de regra de negócio:** funcionário inativo, saldo insuficiente ou EPI inexistente geram respostas 4xx claras.
-- **Autenticação com JWT** e perfis `admin` e `tecnico`. Todas as rotas exigem login, e as exclusões são exclusivas do admin.
 - **Leitor web** ([public/leitor.html](public/leitor.html)) com login e acesso à câmera traseira do celular.
+- **Estrutura multi-filial:** matriz → filiais (cada uma com CNPJ próprio, UF, cidade e bairro) → prédios e setores. Funções num catálogo único do grupo.
+- **Permissões por perfil e por filial:**
+
+  | Perfil | O que faz |
+  |---|---|
+  | `admin` (matriz) | Tudo, em todas as filiais |
+  | `gestor` | Cadastros da própria filial |
+  | `tecnico` | Entregas e estoque |
+  | `saude` | Dados de saúde |
+  | `consulta` | Só leitura |
+
+  Um usuário de uma filial não vê dados de outra, nem trocando o id na URL.
+- **Histórico de lotação:** mudança de setor, função ou filial fecha o período anterior e abre um novo. Isso prova qual era a função do funcionário em cada data.
+- **Nada com histórico é apagado:**
+  - funcionários são desligados e EPIs, filiais e setores são inativados;
+  - o banco recusa exclusões que levariam o histórico junto (`ON DELETE RESTRICT`).
+- **Log de auditoria:** quem fez o quê, quando, de qual IP, com os dados antes e depois. Senhas e chaves de crachá nunca aparecem no log.
+- **Validações:** CPF, CNPJ e UF; matrícula única por CNPJ; CPF único no grupo.
+- **Autenticação com JWT** conferida no banco a cada requisição: um usuário desativado perde o acesso na hora.
 
 ## Em construção (roadmap)
 
 O modelo completo está sendo desenhado junto com a rotina real de um SESMT com várias filiais:
 
-1. **Estrutura multi-filial:** matriz → filiais (cada uma com CNPJ próprio) → prédios, com permissões por filial.
+1. ~~**Estrutura multi-filial** com permissões por filial~~ ✅ concluída
 2. **EPI com valor jurídico:**
    - assinatura por QR + PIN + foto;
    - CA vigente copiado na entrega (a entrega é bloqueada se o CA estiver vencido);
@@ -48,15 +66,16 @@ O modelo completo está sendo desenhado junto com a rotina real de um SESMT com 
 ## Tecnologias
 
 - **Node.js** + **Express 5**
-- **Knex** com migrations: MySQL em desenvolvimento e PostgreSQL em produção
+- **PostgreSQL** + **Knex** (migrations)
 - **JWT** (`jsonwebtoken`) e **bcrypt** (`bcryptjs`) para autenticação
 - **qrcode** para gerar os QR codes e **html5-qrcode** para a leitura pela câmera
+- **Testes:** `node:test` + **embedded-postgres**, que roda os testes num PostgreSQL real e temporário, sem depender do banco online
 
 ## Como rodar
 
 ```bash
 npm install
-cp .env.example .env          # preencha os dados do banco e gere o JWT_SECRET
+cp .env.example .env          # cole a DATABASE_URL do seu Postgres e gere o JWT_SECRET
 npx knex migrate:latest
 npm run criar-admin -- "Seu Nome" voce@exemplo.com "uma-senha-forte"
 npm run dev
@@ -64,19 +83,36 @@ npm run dev
 
 O leitor fica em `http://localhost:3000/leitor.html`. No celular, a câmera só abre por **HTTPS**: use o ambiente de produção ou um túnel (por exemplo, `npx localtunnel --port 3000`).
 
+### Testes
+
+```bash
+npm test
+```
+
+O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
+- sobe um banco temporário;
+- roda as migrations;
+- testa permissões, filtragem por filial, lotação, auditoria e entregas;
+- apaga tudo no fim.
+
 ## Principais rotas
 
 | Método | Rota | Descrição |
 |---|---|---|
-| POST | `/auth/login` | Login, devolve o token JWT |
+| POST | `/auth/login` | Login, devolve o token JWT e as filiais do usuário |
 | GET | `/auth/me` | Usuário logado |
-| GET/POST | `/usuarios` | Usuários (somente admin) |
-| GET/POST | `/funcionarios` | Lista e cadastra funcionários |
+| GET/POST/PUT | `/usuarios` | Usuários e suas filiais (matriz) |
+| GET/POST/PUT | `/filiais` | Filiais: CNPJ, UF, cidade, bairro (cadastro pela matriz) |
+| GET/POST/PUT | `/predios`, `/setores` | Prédios e setores de cada filial |
+| GET/POST/PUT | `/funcoes` | Catálogo de funções (matriz) |
+| GET/POST/PUT | `/funcionarios` | Funcionários com filial, setor e função; desligamento via `status` |
+| GET | `/funcionarios/:id/lotacoes` | Histórico de filial/setor/função |
 | GET | `/funcionarios/:id/qrcode` | PNG do QR do crachá |
 | GET | `/funcionarios/qr/:token` | Dados do funcionário, entregas e EPIs vencidos |
-| GET/POST | `/epis` | Catálogo de EPIs |
+| GET/POST/PUT | `/epis` | Catálogo de EPIs (matriz) |
 | POST | `/entregas/qr` | Entrega por QR code, com baixa de estoque |
 | GET/POST | `/estoque` | Movimentações de estoque |
+| GET | `/auditoria` | Log de auditoria (matriz) |
 | GET/POST | `/treinamentos`, `/certificados`, `/acidentes` | Demais cadastros |
 
 Todas as rotas, exceto `/ping` e `/auth/login`, exigem o cabeçalho `Authorization: Bearer <token>`.

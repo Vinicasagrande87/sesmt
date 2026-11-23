@@ -1,5 +1,5 @@
-// Funções de data independentes do banco (MySQL em dev, Postgres em produção).
-// Trabalhamos sempre com strings 'YYYY-MM-DD' para evitar problemas de fuso.
+// Funções de data. Trabalhamos sempre com strings 'YYYY-MM-DD' para evitar problemas de fuso
+// (o db.js configura o Postgres para devolver colunas DATE nesse formato).
 
 const FUSO = 'America/Sao_Paulo';
 

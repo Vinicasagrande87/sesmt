@@ -1,47 +1,50 @@
+// Catálogo de EPIs do grupo: todos consultam, só a matriz (admin) cadastra e altera.
+// EPI com histórico não é apagado: envie { ativo: false }.
 const knex = require('../database/db');
+const { ErroDeNegocio } = require('../utils/erros');
+const { auditar } = require('../utils/auditoria');
+const { pegar, exigirCampos } = require('../utils/validacao');
+
+const CAMPOS = ['nome', 'ca', 'fabricante', 'descricao', 'validade_dias', 'ativo'];
+
+function validar(dados) {
+  if (dados.validade_dias !== undefined) {
+    const dias = Number(dados.validade_dias);
+    if (!Number.isInteger(dias) || dias < 1) throw new ErroDeNegocio(400, 'validade_dias deve ser um inteiro maior que zero');
+    dados.validade_dias = dias;
+  }
+  return dados;
+}
 
 module.exports = {
-  // Listar todos os EPIs cadastrados
   async index(req, res) {
-    try {
-      const epis = await knex('epis').select('*');
-      return res.json(epis);
-    } catch (error) {
-      return res.status(500).json({ error: 'Erro ao listar EPIs' });
-    }
+    const query = knex('epis').orderBy('nome');
+    if (req.query.ativo !== undefined) query.where('ativo', req.query.ativo === 'true');
+    return res.json(await query);
   },
 
-  // Cadastrar um novo EPI (ex: Capacete, Luva, Bota)
   async create(req, res) {
-    try {
-      const { nome, ca, fabricante, descricao, validade_dias } = req.body;
-
-      if (!nome || !ca || !validade_dias) {
-        return res.status(400).json({ error: 'nome, ca e validade_dias são obrigatórios' });
-      }
-
-      await knex('epis').insert({
-        nome,
-        ca,
-        fabricante,
-        descricao,
-        validade_dias
-      });
-
-      return res.status(201).json({ message: 'EPI cadastrado com sucesso!' });
-    } catch (error) {
-      return res.status(400).json({ error: 'Erro ao cadastrar EPI' });
-    }
+    exigirCampos(req.body, ['nome', 'ca', 'validade_dias']);
+    const dados = validar(pegar(req.body, CAMPOS));
+    const epi = await knex.transaction(async (trx) => {
+      const [novo] = await trx('epis').insert(dados).returning('*');
+      await auditar(trx, req, { acao: 'criar', tabela: 'epis', registro_id: novo.id, depois: novo });
+      return novo;
+    });
+    return res.status(201).json(epi);
   },
 
-  // Remover um EPI do sistema
-  async delete(req, res) {
-    try {
-      const { id } = req.params;
-      await knex('epis').where({ id }).del();
-      return res.status(204).send();
-    } catch (error) {
-      return res.status(400).json({ error: 'Erro ao deletar EPI' });
-    }
+  async update(req, res) {
+    const dados = validar(pegar(req.body, CAMPOS));
+    if (!Object.keys(dados).length) throw new ErroDeNegocio(400, 'Nenhum campo para alterar');
+    const epi = await knex.transaction(async (trx) => {
+      const antes = await trx('epis').where({ id: req.params.id }).forUpdate().first();
+      if (!antes) throw new ErroDeNegocio(404, 'EPI não encontrado');
+      const [depois] = await trx('epis').where({ id: antes.id })
+        .update({ ...dados, updated_at: trx.fn.now() }).returning('*');
+      await auditar(trx, req, { acao: 'alterar', tabela: 'epis', registro_id: antes.id, antes, depois });
+      return depois;
+    });
+    return res.json(epi);
   }
 };

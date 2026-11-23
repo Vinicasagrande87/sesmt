@@ -6,8 +6,6 @@
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "knex": "^3.1.0",
-    "mysql2": "^3.19.1",
-    "nodemon": "^3.1.14",
     "pg": "^8.20.0",
     "qrcode": "^1.5.4"
   },
@@ -19,10 +17,15 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "knex": "knex",
-    "criar-admin": "node src/database/criar-admin.js"
+    "criar-admin": "node src/database/criar-admin.js",
+    "test": "node --test --test-concurrency=1 tests/"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs"
+  "type": "commonjs",
+  "devDependencies": {
+    "embedded-postgres": "17.12.0-beta.19",
+    "nodemon": "^3.1.14"
+  }
 }
