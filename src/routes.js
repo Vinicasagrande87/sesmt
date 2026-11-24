@@ -20,6 +20,7 @@ const UsuarioController = require('./controllers/UsuarioController');
 const AuditoriaController = require('./controllers/AuditoriaController');
 const TurmaController = require('./controllers/TurmaController');
 const VerificacaoController = require('./controllers/VerificacaoController');
+const AsoController = require('./controllers/AsoController');
 const { autenticar, permitir } = require('./middlewares/auth');
 
 // Quem pode o quê (o filtro por filial é feito dentro de cada controller)
@@ -27,6 +28,7 @@ const matriz = permitir('admin');                                   // catálogo
 const gestao = permitir('admin', 'gestor');                         // cadastros da filial, ajustes e estornos
 const operacao = permitir('admin', 'gestor', 'tecnico');            // entregas, estoque, registros
 const cadastroPessoal = permitir('admin', 'gestor', 'tecnico', 'saude'); // ver ficha / QR do funcionário
+const saude = permitir('admin', 'saude');                           // ASOs (dado de saúde, LGPD)
 
 // Rotas públicas
 routes.get('/ping', (req, res) => res.json({ message: 'pong' }));
@@ -137,6 +139,13 @@ routes.get('/certificados', CertificadoController.index);
 routes.post('/certificados', operacao, CertificadoController.createExterno);
 routes.post('/certificados/:id/anular', gestao, CertificadoController.anular);
 routes.get('/certificados/:id/pdf', CertificadoController.pdf);
+
+// ASOs (NR-7): detalhes e PDF só para saude/admin; os demais veem apenas apto/inapto e vencimento
+routes.get('/asos', AsoController.index);
+routes.get('/asos/pendencias', AsoController.pendencias);
+routes.post('/asos', saude, AsoController.create);
+routes.post('/asos/:id/anular', saude, AsoController.anular);
+routes.get('/asos/:id/arquivo', saude, AsoController.arquivo);
 
 // Acidentes
 routes.get('/acidentes', AcidenteController.index);

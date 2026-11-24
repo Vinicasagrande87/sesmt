@@ -59,6 +59,24 @@ A ideia é usar o conhecimento técnico da área para construir uma ferramenta q
 - **Página de presença** ([public/presenca.html](public/presenca.html)): o técnico escolhe a turma do dia e lê os crachás em sequência. Quem ainda não tem PIN cadastra ali mesmo.
 - **`/verificar/<código>`** confirma entregas, presenças e certificados.
 
+### ASOs (NR-7)
+
+- **O PDF da clínica é a fonte:** o perfil saúde anexa o arquivo (com hash) e digita só o essencial:
+  - tipo: admissional, periódico, retorno ao trabalho, mudança de riscos ou demissional;
+  - data, resultado (apto, apto com restrição, inapto);
+  - médico examinador, CRM e clínica; riscos e exames complementares.
+- **Vencimento automático:** pela periodicidade que o PCMSO define para a função (1 a 24 meses), ou pela data que o médico indicou no ASO.
+- **Sigilo dos dados de saúde (LGPD, art. 11):**
+  - só os perfis `saude` e `admin` veem médico, riscos, exames, restrições e o PDF;
+  - gestores e técnicos veem só o necessário para organizar o trabalho: apto/inapto e vencimento;
+  - cada abertura do PDF fica registrada na auditoria;
+  - ASO não entra na verificação pública.
+- **Vale o ASO mais recente:** um periódico inapto derruba quem estava em dia.
+- **ASO digitado errado é anulado,** nunca apagado.
+- **Pendências:** faltando, inapto, vencido, vencendo em X dias e **demissional pendente**:
+  - prazo de 10 dias do desligamento;
+  - dispensa se o último exame tem menos de 135 dias (grau de risco 1 e 2) ou 90 dias (3 e 4), conforme o grau de risco da filial.
+
 ### Estrutura e controle
 - **Estrutura multi-filial:** matriz → filiais (cada uma com CNPJ próprio, UF, cidade e bairro) → prédios e setores. Funções num catálogo único do grupo.
 - **Permissões por perfil e por filial:**
@@ -87,7 +105,7 @@ O modelo completo está sendo desenhado junto com a rotina real de um SESMT com 
 1. ~~**Estrutura multi-filial** com permissões por filial~~ ✅ concluída
 2. ~~**EPI com valor jurídico** e **estoque com custo histórico (PEPS)**~~ ✅ concluída
 3. ~~**Treinamentos:** exigências por função e lista de presença assinada com o crachá~~ ✅ concluída
-4. **ASOs (PCMSO):** controle de vencimentos, com acesso restrito aos dados de saúde (LGPD).
+4. ~~**ASOs (PCMSO):** controle de vencimentos, com acesso restrito aos dados de saúde (LGPD)~~ ✅ concluída
 5. **PPCI por prédio:**
    - projeto aprovado e alvará;
    - comparação entre o que o projeto prevê e o que está instalado;
@@ -128,7 +146,7 @@ npm test
 O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 - sobe um banco temporário;
 - roda as migrations;
-- testa permissões, filtragem por filial, lotação, auditoria e entregas;
+- testa permissões, filtragem por filial, lotação, auditoria, entregas, estoque, treinamentos e ASOs;
 - apaga tudo no fim.
 
 ## Principais rotas
@@ -167,6 +185,10 @@ O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 | GET/POST | `/certificados` | Capacitações; POST lança certificado externo com arquivo |
 | POST | `/certificados/:id/anular` | Anulação de capacitação (gestão) |
 | GET | `/certificados/:id/pdf` | Certificado em PDF (ou o arquivo do externo) |
+| GET/POST | `/asos` | ASOs; POST lança com o PDF da clínica (saude/admin) |
+| GET | `/asos/pendencias` | Faltando, inapto, vencido, vencendo e demissional pendente |
+| POST | `/asos/:id/anular` | Anulação de ASO (saude/admin) |
+| GET | `/asos/:id/arquivo` | PDF do ASO (saude/admin, registrado na auditoria) |
 | POST | `/estoque/entradas` | Entrada de lote com preço pago |
 | GET | `/estoque/saldos`, `/estoque/lotes`, `/estoque/movimentacoes` | Saldos valorizados, lotes e extrato |
 | POST | `/estoque/descartes`, `/estoque/ajustes` | Descarte e ajuste de inventário |

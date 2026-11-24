@@ -9,7 +9,10 @@ module.exports = {
     const id = String(req.params.id);
     if (!/^[0-9a-f-]{36}$/i.test(id)) throw new ErroDeNegocio(404, 'Arquivo não encontrado');
     const arquivo = await knex('arquivos').where({ id }).first();
-    const permitido = arquivo && (arquivo.filial_id ? podeAcessarFilial(req, arquivo.filial_id) : ehAdmin(req));
+    // ASO é dado de saúde (LGPD): só saude/admin, mesmo dentro da filial
+    const saude = ['admin', 'saude'].includes(req.usuario.perfil);
+    const permitido = arquivo && (arquivo.contexto !== 'aso' || saude) &&
+      (arquivo.filial_id ? podeAcessarFilial(req, arquivo.filial_id) : ehAdmin(req));
     if (!permitido) throw new ErroDeNegocio(404, 'Arquivo não encontrado');
 
     await auditar(knex, req, { acao: 'baixar_arquivo', tabela: 'arquivos', registro_id: arquivo.id, filial_id: arquivo.filial_id });

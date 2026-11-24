@@ -5,9 +5,14 @@ const { noEscopo, exigirFilial } = require('../utils/escopo');
 const { UFS, somenteDigitos, cnpjValido, pegar, exigirCampos } = require('../utils/validacao');
 
 const CAMPOS = ['nome', 'tipo', 'matriz', 'cnpj', 'razao_social', 'uf', 'cidade', 'codigo_ibge',
-  'bairro', 'cep', 'logradouro', 'numero', 'complemento', 'ativa'];
+  'bairro', 'cep', 'logradouro', 'numero', 'complemento', 'ativa', 'grau_risco'];
 
 function normalizar(dados) {
+  if (dados.grau_risco !== undefined && dados.grau_risco !== null) {
+    const grau = Number(dados.grau_risco);
+    if (![1, 2, 3, 4].includes(grau)) throw new ErroDeNegocio(400, 'grau_risco deve ser 1, 2, 3 ou 4');
+    dados.grau_risco = grau;
+  }
   if (dados.cnpj !== undefined) {
     dados.cnpj = somenteDigitos(dados.cnpj);
     if (!cnpjValido(dados.cnpj)) throw new ErroDeNegocio(400, 'CNPJ inválido');

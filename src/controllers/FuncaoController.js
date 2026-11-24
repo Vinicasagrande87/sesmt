@@ -4,9 +4,17 @@ const { ErroDeNegocio } = require('../utils/erros');
 const { auditar } = require('../utils/auditoria');
 const { pegar, exigirCampos, somenteDigitos } = require('../utils/validacao');
 
-const CAMPOS = ['nome', 'cbo', 'descricao', 'ativa'];
+const CAMPOS = ['nome', 'cbo', 'descricao', 'ativa', 'periodicidade_aso_meses'];
 
 function normalizar(dados) {
+  if (dados.periodicidade_aso_meses !== undefined) {
+    const meses = Number(dados.periodicidade_aso_meses);
+    // NR-7: periódico no máximo a cada 2 anos
+    if (!Number.isInteger(meses) || meses < 1 || meses > 24) {
+      throw new ErroDeNegocio(400, 'periodicidade_aso_meses deve ser um inteiro entre 1 e 24');
+    }
+    dados.periodicidade_aso_meses = meses;
+  }
   if (dados.cbo) {
     dados.cbo = somenteDigitos(dados.cbo);
     if (dados.cbo.length !== 6) throw new ErroDeNegocio(400, 'CBO deve ter 6 dígitos');
