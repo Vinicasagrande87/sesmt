@@ -46,6 +46,10 @@ const FONTES = {
   acao_prazos: { quando: 'created_at', filial: '(select a.filial_id from acoes a where a.id = t.acao_id)' },
   pt_assinaturas: { quando: 'assinado_em', filial: '(select p.filial_id from pt_participantes x join permissoes_trabalho p on p.id = x.pt_id where x.id = t.participante_id)' },
   pt_medicoes: { quando: 'medido_em', filial: '(select p.filial_id from permissoes_trabalho p where p.id = t.pt_id)' },
+  cipa_reunioes: { quando: 'created_at', filial: '(select m.filial_id from cipa_mandatos m where m.id = t.mandato_id)' },
+  cipa_reuniao_anulacoes: { quando: 'created_at', filial: '(select m.filial_id from cipa_reunioes r join cipa_mandatos m on m.id = r.mandato_id where r.id = t.reuniao_id)' },
+  cipa_candidatos: { quando: 'created_at', filial: '(select m.filial_id from cipa_eleicoes e join cipa_mandatos m on m.id = e.mandato_id where e.id = t.eleicao_id)' },
+  cipa_votos: { quando: 'created_at', filial: '(select m.filial_id from cipa_candidatos c join cipa_eleicoes e on e.id = c.eleicao_id join cipa_mandatos m on m.id = e.mandato_id where c.id = t.candidato_id)' },
   // Documento de terceirizada vale para as filiais onde a empresa já tinha contrato quando ele foi lançado
   // (contrato aberto depois não muda o fechamento de um mês passado)
   terceiro_documentos: { quando: 'created_at', filiais: 'select c.filial_id from terceiro_contratos c where c.empresa_id = t.empresa_id and c.created_at <= t.created_at' },

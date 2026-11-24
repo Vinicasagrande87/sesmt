@@ -13,6 +13,7 @@ const { enviarEmail, emailAtivo } = require('./email');
 const { situacaoOcorrencias, TIPOS: TIPOS_OCORRENCIA } = require('./ocorrencias');
 const { situacaoAcoes } = require('./acoes');
 const { situacaoTerceiros } = require('./terceiros');
+const { situacaoCipa } = require('./cipa');
 
 const COMO_MATRIZ = { usuario: { perfil: 'admin', filiais: null } }; // os avisos olham todas as filiais
 const MANUTENCOES = { recarga: 'Recarga', teste_hidrostatico: 'Teste hidrostático', manutencao: 'Manutenção' };
@@ -92,6 +93,13 @@ async function montarAvisos(db, { dataHoje = hoje() } = {}) {
     if (!['vencido', 'vencendo'].includes(t.situacao)) continue;
     add({ modulo: 'Terceirizada', filial_id: t.filial_id, filial: t.filial, data: t.vencimento,
       descricao: `${t.empresa}${t.trabalhador ? ` — ${t.trabalhador}` : ''} — ${t.exigencia}` });
+  }
+
+  // CIPA: edital da próxima eleição e reunião mensal
+  for (const c of await situacaoCipa(db, COMO_MATRIZ, {})) {
+    if (!c.vencimento) continue;
+    const textos = { edital_proximo: 'publicar o edital da eleição da CIPA', edital_atrasado: 'publicar o edital da eleição da CIPA (atrasado)', reuniao_atrasada: 'fazer a reunião ordinária mensal da CIPA' };
+    if (textos[c.situacao]) add({ modulo: 'CIPA', filial_id: c.filial_id, filial: c.filial, data: c.vencimento, descricao: textos[c.situacao] });
   }
 
   // Plano de ação: abertas com prazo até a data-limite (o responsável também recebe as suas)

@@ -9,6 +9,7 @@ const { situacaoOcorrencias } = require('./ocorrencias');
 const { situacaoAcoes } = require('./acoes');
 const { situacaoPermissoes } = require('./permissoes');
 const { situacaoTerceiros } = require('./terceiros');
+const { situacaoCipa } = require('./cipa');
 
 const ORDEM_COR = ['cinza', 'verde', 'amarelo', 'vermelho'];
 const pior = (a, b) => (ORDEM_COR.indexOf(a) >= ORDEM_COR.indexOf(b) ? a : b);
@@ -87,6 +88,16 @@ const MODULOS = {
     },
     chave: (i) => `${i.contrato_id}:${i.trabalhador_id || 'e'}:${i.exigencia}`,
     gravidade: (i) => (['faltando', 'vencido', 'inapto'].includes(i.situacao) ? 'vermelho' : i.situacao === 'vencendo' || i.com_restricao ? 'amarelo' : null)
+  },
+  // CIPA: cada filial tem os seus itens (ou um "em dia"); edital chegando e grau de risco não informado = amarelo
+  cipa: {
+    nome: 'CIPA',
+    async calcular(db, req, filtros, o) {
+      const itens = await situacaoCipa(db, req, filtros, { dataBase: o.dataBase });
+      return { itens, unidades: itens.map((i) => ({ filial_id: i.filial_id, chave: `${i.situacao === 'em_dia' ? 'ok' : i.situacao}:${i.membro_id || ''}` })) };
+    },
+    chave: (i) => `${i.situacao === 'em_dia' ? 'ok' : i.situacao}:${i.membro_id || ''}`,
+    gravidade: (i) => (i.situacao === 'em_dia' ? null : ['edital_proximo', 'grau_risco_nao_informado'].includes(i.situacao) ? 'amarelo' : 'vermelho')
   }
 };
 

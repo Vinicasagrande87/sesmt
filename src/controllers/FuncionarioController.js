@@ -11,6 +11,7 @@ const { gerarHash } = require('../services/pin');
 const { gerarFichaEpi } = require('../relatorios/fichaEpi');
 
 const STATUS = ['Ativo', 'Afastado', 'Desligado'];
+const { estabilidade: estabilidadeCipa } = require('../services/cipa');
 const DADOS_PESSOAIS = ['matricula', 'nome', 'cpf', 'data_nascimento', 'data_admissao'];
 const LOTACAO = ['filial_id', 'setor_id', 'funcao_id'];
 
@@ -148,6 +149,7 @@ module.exports = {
       const antes = await buscarNoEscopo(req, req.params.id, trx);
       await trx('funcionarios').where({ id: antes.id }).forUpdate().first('id');
       const alteracoes = { ...dados };
+      let estabilidadeConfirmada = null;
 
       // Status / desligamento
       if (status !== undefined) {
@@ -155,6 +157,16 @@ module.exports = {
         if (status === 'Desligado') {
           const dataDemissao = data_demissao || hoje();
           if (!dataValida(dataDemissao)) throw new ErroDeNegocio(400, 'data_demissao deve estar no formato AAAA-MM-DD');
+          // Estabilidade provisória do cipeiro: só com confirmação explícita (ex.: justa causa, pedido de demissão)
+          const est = await estabilidadeCipa(trx, antes.id, dataDemissao);
+          if (est.estavel && req.body.ciente_estabilidade_cipa !== true) {
+            throw new ErroDeNegocio(409, `${antes.nome} tem estabilidade provisória até ${est.ate.split('-').reverse().join('/')} (${est.motivo}). ` +
+              'Desligamento sem justa causa não é permitido; se for justa causa ou pedido de demissão, envie ciente_estabilidade_cipa: true.', { estabilidade: est });
+          }
+          if (est.estavel) estabilidadeConfirmada = est;
+          // Quem sai da empresa sai também da CIPA (a vaga aparece como composição incompleta)
+          await trx('cipa_membros').where({ funcionario_id: antes.id }).whereNull('fim').where('inicio', '<=', dataDemissao)
+            .update({ fim: dataDemissao, motivo_saida: 'Desligamento da empresa' });
           alteracoes.data_demissao = dataDemissao;
           // Encerra a lotação atual na data do desligamento
           await trx('funcionario_lotacoes')
@@ -202,7 +214,8 @@ module.exports = {
         .update({ ...alteracoes, updated_at: trx.fn.now() }).returning('*');
       await auditar(trx, req, {
         acao: status === 'Desligado' ? 'desligar' : 'alterar',
-        tabela: 'funcionarios', registro_id: antes.id, filial_id: depois.filial_id, antes, depois
+        tabela: 'funcionarios', registro_id: antes.id, filial_id: depois.filial_id, antes,
+        depois: estabilidadeConfirmada ? { ...depois, desligado_com_estabilidade_cipa: estabilidadeConfirmada } : depois
       });
       return depois;
     });

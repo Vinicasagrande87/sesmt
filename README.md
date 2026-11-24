@@ -243,6 +243,27 @@ A ideia é usar o conhecimento técnico da área para construir uma ferramenta q
   - a ciência é registrada pela equipe de SST no local.
 - **Integrações:** pendências com "como estava em", módulo no semáforo, relatório, avisos semanais e fechamento mensal.
 
+### CIPA (NR-5)
+- **Dimensionamento automático** pelo Quadro I da NR-5 (grau de risco da filial × empregados ativos):
+  - diz se a filial precisa de **CIPA** (quantos titulares e suplentes) ou só de um **designado**;
+  - diz a carga mínima do treinamento: 8, 12, 16 ou 20 h.
+- **Mandato de 1 ano**, com o dimensionamento da data gravado:
+  - representantes do empregador e dos empregados, titulares e suplentes;
+  - presidente indicado pelo empregador e vice escolhido entre os eleitos;
+  - limite de **uma reeleição**.
+- **Eleição:**
+  - prazos da NR-5 conferidos (edital 60 dias antes, inscrição de no mínimo 15 dias, votação até 30 dias antes);
+  - quórum de 50%: sem quórum, não apura;
+  - os mais votados viram titulares e suplentes, e no empate quem tem mais tempo de casa;
+  - candidatos e votos só aceitam inclusão.
+- **Reuniões ordinárias e extraordinárias** com pauta, ata (e o arquivo assinado) e presentes, só por inclusão.
+- **Estabilidade provisória:**
+  - candidato, da inscrição até a eleição;
+  - eleito, até 1 ano após o mandato;
+  - o desligamento de quem tem estabilidade é bloqueado, salvo confirmação explícita (justa causa ou pedido de demissão), que fica no log;
+  - quem sai da empresa sai também da CIPA.
+- **Pendências:** grau de risco não informado, filial sem CIPA ou sem designado, composição incompleta, membro sem o treinamento da NR-5, reunião mensal atrasada e edital da próxima eleição chegando ou atrasado. Também entram no semáforo, no relatório e nos avisos semanais.
+
 ### Estrutura e controle
 - **Estrutura multi-filial:** matriz → filiais (cada uma com CNPJ próprio, UF, cidade e bairro) → prédios e setores. Funções num catálogo único do grupo.
 - **Permissões por perfil e por filial:**
@@ -326,7 +347,7 @@ npm test
 O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 - sobe um banco temporário;
 - roda as migrations;
-- testa permissões, filtragem por filial, lotação, auditoria, entregas, estoque, treinamentos, ASOs, PGR, ordens de serviço, PPCI, relatórios, integridade (travas do banco, cadeia de hash e fechamento mensal), contas, avisos por e-mail ocorrências (CAT, investigação e indicadores), plano de ação, permissão de trabalho e terceirizadas;
+- testa permissões, filtragem por filial, lotação, auditoria, entregas, estoque, treinamentos, ASOs, PGR, ordens de serviço, PPCI, relatórios, integridade (travas do banco, cadeia de hash e fechamento mensal), contas, avisos por e-mail ocorrências (CAT, investigação e indicadores), plano de ação, permissão de trabalho, terceirizadas e CIPA;
 - apaga tudo no fim.
 
 ## Principais rotas
@@ -360,7 +381,7 @@ O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 | POST | `/entregas/:id/estorno` | Estorno de entrega (gestão) |
 | GET | `/verificar/:codigo` | Verificação pública de entrega, presença, certificado, ciência de OS, inspeção de incêndio, relatório, fechamento ou permissão de trabalho |
 | GET | `/painel/conformidade` | Semáforo por filial e módulo (`?filial_id=&data_base=`) |
-| GET | `/relatorios/:tipo` | PDF ou Excel (`?formato=pdf\|xlsx&data_base=&todas=true`): `conformidade`, `treinamentos`, `asos`, `ordens_servico`, `ppci`, `ocorrencias`, `acoes`, `permissoes`, `terceiros` |
+| GET | `/relatorios/:tipo` | PDF ou Excel (`?formato=pdf\|xlsx&data_base=&todas=true`): `conformidade`, `treinamentos`, `asos`, `ordens_servico`, `ppci`, `ocorrencias`, `acoes`, `permissoes`, `terceiros`, `cipa` |
 | GET | `/relatorios-emitidos` | Relatórios emitidos nas filiais do usuário, com código e SHA-256 |
 | GET/POST | `/fechamentos` | Fechamento mensal da filial (POST pela gestão); `?filial_id=` lista também os meses em aberto |
 | GET | `/fechamentos/:id`, `/fechamentos/:id/conferencia` | Situação congelada / conferência do que mudou desde o fechamento |
@@ -434,6 +455,12 @@ O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 | POST | `/terceiros/documentos`, `/terceiro-documentos/:id/anular` | PGR/PCMSO da empresa; ASO, integração e treinamentos do trabalhador |
 | GET | `/terceiros/pendencias` | Documentos faltando, vencidos ou vencendo por contrato |
 | GET | `/terceiros/acesso` | Portaria: o CPF pode trabalhar hoje nesta filial? |
+| GET | `/cipa/dimensionamento` | O que o Quadro I da NR-5 exige de cada filial hoje |
+| GET/POST | `/cipa/mandatos` | Mandatos (CIPA ou designado) com membros, eleição e reuniões |
+| POST/PUT | `/cipa/mandatos/:id/membros`, `/cipa-membros/:id` | Membros e cargos (+ `/cipa-membros/:id/saida`) |
+| POST | `/cipa/mandatos/:id/eleicao`, `/cipa/eleicoes/:id/candidatos`, `/cipa/eleicoes/:id/apuracao` | Eleição: prazos, inscrição e apuração |
+| POST | `/cipa/mandatos/:id/reunioes` | Reunião com pauta, ata e presentes (+ `/cipa-reunioes/:id/anular`) |
+| GET | `/cipa/pendencias`, `/cipa/estabilidades` | Pendências da NR-5 / quem tem estabilidade provisória |
 
 Todas as rotas, exceto `/ping` e `/auth/login`, exigem o cabeçalho `Authorization: Bearer <token>`.
 

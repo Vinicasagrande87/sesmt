@@ -16,6 +16,7 @@ const OcorrenciaController = require('./controllers/OcorrenciaController');
 const AcaoController = require('./controllers/AcaoController');
 const PermissaoTrabalhoController = require('./controllers/PermissaoTrabalhoController');
 const TerceiroController = require('./controllers/TerceiroController');
+const CipaController = require('./controllers/CipaController');
 const TreinamentoController = require('./controllers/TreinamentoController');
 const CertificadoController = require('./controllers/CertificadoController');
 const AuthController = require('./controllers/AuthController');
@@ -292,6 +293,22 @@ routes.post('/terceiro-documentos/:id/anular', gestao, TerceiroController.anular
 routes.get('/terceiro-documentos/:id/arquivo', TerceiroController.arquivo);
 routes.get('/terceiros/pendencias', TerceiroController.pendencias);
 routes.get('/terceiros/acesso', TerceiroController.acesso);
+
+// CIPA (NR-5): dimensionamento, mandatos, membros, eleição, reuniões e estabilidade
+routes.get('/cipa/dimensionamento', CipaController.dimensionamento);
+routes.get('/cipa/pendencias', CipaController.pendencias);
+routes.get('/cipa/estabilidades', CipaController.estabilidades);
+routes.get('/cipa/mandatos', CipaController.mandatos);
+routes.post('/cipa/mandatos', gestao, CipaController.criarMandato);
+routes.get('/cipa/mandatos/:id', CipaController.mandato);
+routes.post('/cipa/mandatos/:id/membros', gestao, CipaController.adicionarMembro);
+routes.post('/cipa/mandatos/:id/eleicao', gestao, CipaController.criarEleicao);
+routes.post('/cipa/mandatos/:id/reunioes', operacao, CipaController.registrarReuniao);
+routes.put('/cipa-membros/:id', gestao, CipaController.definirCargo);
+routes.post('/cipa-membros/:id/saida', gestao, CipaController.saidaMembro);
+routes.post('/cipa/eleicoes/:id/candidatos', operacao, CipaController.inscreverCandidato);
+routes.post('/cipa/eleicoes/:id/apuracao', gestao, CipaController.apurar);
+routes.post('/cipa-reunioes/:id/anular', gestao, CipaController.anularReuniao);
 
 routes.get('/horas-trabalhadas', OcorrenciaController.horas);
 routes.put('/horas-trabalhadas', gestao, OcorrenciaController.definirHoras);

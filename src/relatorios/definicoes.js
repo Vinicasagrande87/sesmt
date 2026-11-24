@@ -27,7 +27,11 @@ const SITUACOES = {
   atrasada: 'Atrasada', vence_em_breve: 'Vence em breve', no_prazo: 'No prazo', concluida: 'Concluída (aguarda verificação)', verificada: 'Verificada (eficaz)',
   // permissões de trabalho
   vencida_sem_encerramento: 'Vencida sem encerramento', aguardando_assinaturas: 'Começou sem todas as assinaturas', liberada: 'Liberada',
-  programada: 'Programada', encerrada: 'Encerrada'
+  programada: 'Programada', encerrada: 'Encerrada',
+  // CIPA
+  grau_risco_nao_informado: 'Grau de risco da filial não informado', sem_cipa: 'Precisa de CIPA e não tem mandato',
+  sem_designado: 'Precisa de designado e não tem', composicao_incompleta: 'Composição incompleta', membro_sem_treinamento: 'Membro sem treinamento NR-5',
+  reuniao_atrasada: 'Reunião mensal atrasada', edital_atrasado: 'Edital da eleição atrasado', edital_proximo: 'Edital da eleição: prazo chegando'
 };
 const rotulo = (s) => SITUACOES[s] || s;
 const CORES = { verde: 'Verde', amarelo: 'Amarelo', vermelho: 'Vermelho', cinza: 'Sem dados' };
@@ -170,6 +174,19 @@ const RELATORIOS = {
       { titulo: 'Exigência', largura: 120, valor: (i) => i.exigencia },
       { titulo: 'Situação', largura: 85, valor: (i) => rotulo(i.situacao) + (i.com_restricao ? ' (com restrição)' : '') },
       { titulo: 'Vencimento', largura: 60, valor: (i) => i.vencimento, tipo: 'data' }
+    ]
+  },
+  cipa: {
+    titulo: 'CIPA (NR-5)',
+    modulo: MODULOS.cipa,
+    colunas: [
+      { titulo: 'Filial', largura: 130, valor: (i) => i.filial },
+      { titulo: 'Empregados', largura: 60, valor: (i) => i.empregados },
+      { titulo: 'Exigido', largura: 70, valor: (i) => ({ cipa: 'CIPA', designado: 'Designado', nenhum: '—' }[i.exigido] || '?') },
+      { titulo: 'Situação', largura: 140, valor: (i) => rotulo(i.situacao) },
+      { titulo: 'Membro', largura: 120, valor: (i) => i.membro || '' },
+      { titulo: 'Detalhe', largura: 180, valor: (i) => i.detalhe || '' },
+      { titulo: 'Prazo', largura: 60, valor: (i) => i.vencimento, tipo: 'data' }
     ]
   }
 };
