@@ -20,6 +20,7 @@ function desenharTabela(doc, { colunas, linhas, destacar }) {
   cabecalho();
   if (!linhas.length) {
     doc.moveDown(0.5).text('Nenhum registro.', x0 + 2);
+    doc.x = x0;
     return;
   }
   linhas.forEach((valores, i) => {
@@ -39,6 +40,7 @@ function desenharTabela(doc, { colunas, linhas, destacar }) {
     doc.fillColor('#000');
     doc.y = y + altura;
   });
+  doc.x = x0; // devolve o cursor à margem (senão o texto seguinte sai na última coluna)
 }
 
 function rodape(doc, texto) {

@@ -21,6 +21,8 @@ const AuditoriaController = require('./controllers/AuditoriaController');
 const TurmaController = require('./controllers/TurmaController');
 const VerificacaoController = require('./controllers/VerificacaoController');
 const AsoController = require('./controllers/AsoController');
+const PgrController = require('./controllers/PgrController');
+const OrdemServicoController = require('./controllers/OrdemServicoController');
 const { autenticar, permitir } = require('./middlewares/auth');
 
 // Quem pode o quê (o filtro por filial é feito dentro de cada controller)
@@ -146,6 +148,25 @@ routes.get('/asos/pendencias', AsoController.pendencias);
 routes.post('/asos', saude, AsoController.create);
 routes.post('/asos/:id/anular', saude, AsoController.anular);
 routes.get('/asos/:id/arquivo', saude, AsoController.arquivo);
+
+// PGR da filial e ordens de serviço (NR-1)
+routes.get('/pgrs', PgrController.index);
+routes.get('/pgrs/:id', PgrController.show);
+routes.get('/pgrs/:id/arquivo', PgrController.arquivo);
+routes.post('/pgrs', operacao, PgrController.create);
+routes.put('/pgrs/:id', operacao, PgrController.update);
+routes.post('/pgrs/:id/grupos', operacao, PgrController.adicionarGrupos);
+routes.put('/pgr-grupos/:id', operacao, PgrController.alterarGrupo);
+routes.delete('/pgr-grupos/:id', operacao, PgrController.removerGrupo);
+routes.post('/pgrs/:id/publicar', operacao, PgrController.publicar);
+routes.post('/pgrs/:id/revisar', operacao, PgrController.revisar);
+
+routes.get('/funcionarios/:id/ordem-servico', OrdemServicoController.doFuncionario);
+routes.get('/ordens-servico/pendencias', OrdemServicoController.pendencias);
+routes.post('/ordens-servico/ciencia', operacao, OrdemServicoController.cienciaQr);
+routes.get('/ordens-servico/:id/pdf', OrdemServicoController.pdf);
+routes.post('/ordens-servico/:id/ciencias/manual', gestao, OrdemServicoController.cienciaManual);
+routes.post('/os-ciencias/:id/anular', gestao, OrdemServicoController.anularCiencia);
 
 // Acidentes
 routes.get('/acidentes', AcidenteController.index);

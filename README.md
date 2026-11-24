@@ -77,6 +77,27 @@ A ideia é usar o conhecimento técnico da área para construir uma ferramenta q
   - prazo de 10 dias do desligamento;
   - dispensa se o último exame tem menos de 135 dias (grau de risco 1 e 2) ou 90 dias (3 e 4), conforme o grau de risco da filial.
 
+### PGR e ordens de serviço (NR-1)
+
+- **Cada filial carrega o seu PGR:**
+  - vigência, responsável técnico e PDF assinado;
+  - um PGR pode cobrir mais de um CNPJ.
+- **O PGR é organizado em grupos de exposição** (setor + atividade + funções expostas), cada um com:
+  - inventário de riscos: só as linhas que existem, sem o checklist vazio;
+  - medidas de controle, EPIs por parte do corpo e treinamentos propostos.
+- **Classificação de risco pela matriz AIHA:** probabilidade × efeito gera o nível (trivial a muito alto) automaticamente.
+- **Importação em lote:** setor e funções podem vir pelo nome, o que facilita carregar a planilha montada a partir do PDF. Vale tudo ou nada: um erro em qualquer grupo cancela o lote inteiro.
+- **Publicação congela o PGR** e gera uma **ordem de serviço por grupo**:
+  - o conteúdo da OS é "fotografado" (JSON + SHA-256);
+  - a ciência do funcionário fica ligada exatamente ao texto que ele viu.
+- **A OS de cada funcionário é localizada pelo setor + função:** a mesma função em setores diferentes recebe OS diferentes.
+- **Ciência pelo crachá QR + PIN,** com código de verificação público. A OS assinada em papel pode ser lançada pela gestão, com justificativa e digitalização.
+- **Revisão:** corrigir ou renovar o PGR gera um novo rascunho copiado do anterior.
+  - Ao publicar, o anterior passa a "substituído" e todos precisam dar ciência da nova versão.
+  - O histórico das ciências antigas continua guardado.
+- **Pendências:** sem PGR, setor/função fora do PGR, ciência pendente, PGR vencido e **EPI exigido pela OS que o funcionário nunca recebeu**.
+- **OS em PDF:** em branco (por grupo) ou personalizada, com a ciência e o hash do conteúdo.
+
 ### Estrutura e controle
 - **Estrutura multi-filial:** matriz → filiais (cada uma com CNPJ próprio, UF, cidade e bairro) → prédios e setores. Funções num catálogo único do grupo.
 - **Permissões por perfil e por filial:**
@@ -106,15 +127,16 @@ O modelo completo está sendo desenhado junto com a rotina real de um SESMT com 
 2. ~~**EPI com valor jurídico** e **estoque com custo histórico (PEPS)**~~ ✅ concluída
 3. ~~**Treinamentos:** exigências por função e lista de presença assinada com o crachá~~ ✅ concluída
 4. ~~**ASOs (PCMSO):** controle de vencimentos, com acesso restrito aos dados de saúde (LGPD)~~ ✅ concluída
-5. **PPCI por prédio:**
+5. ~~**PGR e ordens de serviço:** inventário de riscos por filial e OS com ciência pelo crachá~~ ✅ concluída
+6. **PPCI por prédio:**
    - projeto aprovado e alvará;
    - comparação entre o que o projeto prevê e o que está instalado;
    - manutenção de extintores e inspeção mensal por QR no equipamento.
-6. **Relatórios em todas as áreas:**
+7. **Relatórios em todas as áreas:**
    - exportação em PDF e Excel, com código de verificação;
    - consulta da situação "como estava em uma data";
    - painel de conformidade.
-7. **Encadeamento por hash e fechamento mensal:** reforça a prova de que nada foi alterado. A correção por estorno já está pronta.
+8. **Encadeamento por hash e fechamento mensal:** reforça a prova de que nada foi alterado. A correção por estorno já está pronta.
 
 ## Tecnologias
 
@@ -146,7 +168,7 @@ npm test
 O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 - sobe um banco temporário;
 - roda as migrations;
-- testa permissões, filtragem por filial, lotação, auditoria, entregas, estoque, treinamentos e ASOs;
+- testa permissões, filtragem por filial, lotação, auditoria, entregas, estoque, treinamentos, ASOs, PGR e ordens de serviço;
 - apaga tudo no fim.
 
 ## Principais rotas
@@ -172,7 +194,7 @@ O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 | POST | `/entregas/qr` | Entrega por QR + PIN (+ foto), baixa PEPS |
 | POST | `/entregas` | Entrega manual com justificativa (gestão) |
 | POST | `/entregas/:id/estorno` | Estorno de entrega (gestão) |
-| GET | `/verificar/:codigo` | Verificação pública de entrega, presença ou certificado |
+| GET | `/verificar/:codigo` | Verificação pública de entrega, presença, certificado ou ciência de OS |
 | GET/POST/PUT | `/treinamentos` | Catálogo de treinamentos (matriz) |
 | GET/PUT | `/funcoes/:id/treinamentos` | Treinamentos exigidos pela função (matriz) |
 | GET | `/treinamentos/pendencias` | Faltando, vencidos e vencendo por filial/setor/funcionário |
@@ -189,6 +211,16 @@ O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 | GET | `/asos/pendencias` | Faltando, inapto, vencido, vencendo e demissional pendente |
 | POST | `/asos/:id/anular` | Anulação de ASO (saude/admin) |
 | GET | `/asos/:id/arquivo` | PDF do ASO (saude/admin, registrado na auditoria) |
+| GET/POST/PUT | `/pgrs` | PGR da filial (rascunho, vigente, substituído) com PDF assinado |
+| POST | `/pgrs/:id/grupos` | Grupo de exposição, ou `{ grupos: [...] }` para importar em lote |
+| PUT/DELETE | `/pgr-grupos/:id` | Alterar ou remover grupo (só rascunho) |
+| POST | `/pgrs/:id/publicar`, `/pgrs/:id/revisar` | Publicar (gera as OS) / abrir revisão |
+| GET | `/funcionarios/:id/ordem-servico` | OS vigente do funcionário, ciência e histórico |
+| POST | `/ordens-servico/ciencia` | Ciência da OS por QR + PIN |
+| POST | `/ordens-servico/:id/ciencias/manual` | Ciência de OS assinada em papel (gestão) |
+| POST | `/os-ciencias/:id/anular` | Anulação de ciência (gestão) |
+| GET | `/ordens-servico/:id/pdf` | OS em PDF (`?funcionario_id=` personaliza) |
+| GET | `/ordens-servico/pendencias` | Sem PGR, sem grupo, ciência pendente, EPI nunca entregue |
 | POST | `/estoque/entradas` | Entrada de lote com preço pago |
 | GET | `/estoque/saldos`, `/estoque/lotes`, `/estoque/movimentacoes` | Saldos valorizados, lotes e extrato |
 | POST | `/estoque/descartes`, `/estoque/ajustes` | Descarte e ajuste de inventário |

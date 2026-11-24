@@ -100,7 +100,12 @@ async function iniciarAmbiente() {
     await new Promise((resolve) => server.close(resolve));
     await knex.destroy();
     await pg.stop();
-    fs.rmSync(pasta, { recursive: true, force: true });
+    // No Windows o Postgres às vezes ainda segura a pasta por um instante após parar
+    try {
+      fs.rmSync(pasta, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+    } catch (erro) {
+      console.warn(`Aviso: não consegui apagar ${pasta} (${erro.code}); é só uma pasta temporária.`);
+    }
   }
 
   return { knex, base, porta, criarBanco: (nome) => pg.createDatabase(nome), chamar, login, criarUsuarioNoBanco, encerrar };

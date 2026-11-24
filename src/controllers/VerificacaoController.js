@@ -73,11 +73,35 @@ async function certificado(codigo) {
   };
 }
 
+async function cienciaOs(codigo) {
+  const c = await knex('os_ciencias as c')
+    .join('funcionarios as f', 'f.id', 'c.funcionario_id')
+    .join('ordens_servico as os', 'os.id', 'c.ordem_servico_id')
+    .leftJoin('os_ciencia_anulacoes as a', 'a.ciencia_id', 'c.id')
+    .where('c.codigo_verificacao', codigo)
+    .first('c.assinado_em', 'c.data_ciencia', 'c.metodo_assinatura', 'os.id as ordem_servico', 'os.hash',
+      knex.raw("os.conteudo->>'setor' as setor"), knex.raw("os.conteudo->>'atividade' as atividade"),
+      'f.nome as funcionario', 'a.created_at as anulada_em');
+  if (!c) return null;
+  return {
+    tipo: 'ciencia_ordem_servico',
+    data_hora: c.assinado_em,
+    data_ciencia: c.data_ciencia,
+    ordem_servico: c.ordem_servico,
+    setor: c.setor,
+    atividade: c.atividade,
+    hash_conteudo: c.hash,
+    funcionario: iniciais(c.funcionario),
+    assinatura: c.metodo_assinatura === 'qr_pin' ? 'Crachá QR + PIN pessoal' : 'Registro manual (OS em papel)',
+    anulada: !!c.anulada_em
+  };
+}
+
 module.exports = {
   async verificar(req, res) {
     const codigo = String(req.params.codigo || '').toUpperCase();
     if (!/^[A-Z0-9]{8}$/.test(codigo)) return res.status(404).json({ valida: false });
-    const achado = (await entrega(codigo)) || (await presenca(codigo)) || (await certificado(codigo));
+    const achado = (await entrega(codigo)) || (await presenca(codigo)) || (await certificado(codigo)) || (await cienciaOs(codigo));
     if (!achado) return res.status(404).json({ valida: false });
     return res.json({ valida: true, codigo, ...achado });
   }
