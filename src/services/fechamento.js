@@ -37,7 +37,11 @@ const FONTES = {
   ppcis: { quando: 'created_at', filial: 't.filial_id' },
   ppci_anulacoes: { quando: 'created_at', filial: '(select p.filial_id from ppcis p where p.id = t.ppci_id)' },
   alvaras: { quando: 'created_at', filial: 't.filial_id' },
-  alvara_anulacoes: { quando: 'created_at', filial: '(select a.filial_id from alvaras a where a.id = t.alvara_id)' }
+  alvara_anulacoes: { quando: 'created_at', filial: '(select a.filial_id from alvaras a where a.id = t.alvara_id)' },
+  cats: { quando: 'created_at', filial: 't.filial_id' },
+  cat_anulacoes: { quando: 'created_at', filial: '(select c.filial_id from cats c where c.id = t.cat_id)' },
+  ocorrencia_testemunhas: { quando: 'created_at', filial: '(select o.filial_id from ocorrencias o where o.id = t.ocorrencia_id)' },
+  ocorrencia_anexos: { quando: 'created_at', filial: '(select o.filial_id from ocorrencias o where o.id = t.ocorrencia_id)' }
 };
 
 function periodo(competencia) {

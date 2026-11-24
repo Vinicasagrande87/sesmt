@@ -156,6 +156,37 @@ A ideia é usar o conhecimento técnico da área para construir uma ferramenta q
 - **Conferência do fechamento:** recalcula tudo e aponta cada registro alterado, apagado ou lançado depois com data retroativa.
 - **Recomendação para produção:** o usuário do banco usado pela aplicação não deve ser dono das tabelas nem superusuário. Assim ele não consegue desligar as travas.
 
+### Ocorrências: acidentes, CAT e investigação
+- **Tipos:** acidente típico, de trajeto, doença ocupacional, incidente (dano sem lesão) e quase-acidente.
+  - Numeração própria por filial e ano (ex.: 2026/0003).
+  - Vítimas de qualquer vínculo: empregado, terceiro (com a empresa), estudante e visitante.
+  - Do empregado, ficam gravados o setor e a função da época.
+- **Campos do eSocial S-2210** já guardados: tipo de local, horas trabalhadas antes, parte do corpo e lateralidade, natureza da lesão, agente causador, situação geradora, comunicação à polícia e atestado.
+- **CAT por vítima empregada:**
+  - prazo legal do 1º dia útil seguinte e, no óbito, imediato (Lei 8.213, art. 22);
+  - CAT inicial, reabertura e óbito, com arquivo;
+  - só aceita inclusão (correção por anulação) e mostra se foi emitida no prazo.
+- **Sigilo médico:** CID, atestado e médico só para saúde/admin, inclusive na leitura e no PDF. O CID não vai para o log de auditoria.
+- **Investigação:**
+  - método (árvore de causas, 5 porquês, Ishikawa), equipe, fatos, causas e conclusão;
+  - causas classificadas como imediata, raiz ou contribuinte e por categoria (6M + gestão);
+  - prazo de 30 dias para concluir;
+  - só conclui com causas, conclusão escrita e a CAT de cada empregado registrada;
+  - depois de concluída, fica travada, e só afastamento, retorno, óbito e dados médicos continuam sendo atualizados.
+- **Cancelamento** pela gestão, com motivo. A ocorrência cancelada continua guardada.
+- **Indicadores da NBR 14280** por filial e mês:
+  - taxa de frequência e de gravidade, com dias perdidos e debitados;
+  - horas-homem informadas pela filial ou, se não houver, estimadas pelo número de empregados;
+  - trajeto fica fora das taxas;
+  - dias sem acidente com afastamento.
+- **Integrações:**
+  - e-mail na hora do registro, com o prazo da CAT;
+  - CAT e investigação no resumo semanal de avisos;
+  - módulo próprio no semáforo e relatório PDF/Excel;
+  - PDF da ocorrência;
+  - CAT, testemunhas e anexos na impressão digital do fechamento mensal.
+- Os registros da tabela antiga de acidentes foram copiados como ocorrências de legado. A tabela antiga ficou guardada.
+
 ### Estrutura e controle
 - **Estrutura multi-filial:** matriz → filiais (cada uma com CNPJ próprio, UF, cidade e bairro) → prédios e setores. Funções num catálogo único do grupo.
 - **Permissões por perfil e por filial:**
@@ -239,7 +270,7 @@ npm test
 O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 - sobe um banco temporário;
 - roda as migrations;
-- testa permissões, filtragem por filial, lotação, auditoria, entregas, estoque, treinamentos, ASOs, PGR, ordens de serviço, PPCI, relatórios, integridade (travas do banco, cadeia de hash e fechamento mensal), contas e avisos por e-mail;
+- testa permissões, filtragem por filial, lotação, auditoria, entregas, estoque, treinamentos, ASOs, PGR, ordens de serviço, PPCI, relatórios, integridade (travas do banco, cadeia de hash e fechamento mensal), contas, avisos por e-mail e ocorrências (CAT, investigação e indicadores);
 - apaga tudo no fim.
 
 ## Principais rotas
@@ -273,7 +304,7 @@ O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 | POST | `/entregas/:id/estorno` | Estorno de entrega (gestão) |
 | GET | `/verificar/:codigo` | Verificação pública de entrega, presença, certificado, ciência de OS, inspeção de incêndio, relatório ou fechamento |
 | GET | `/painel/conformidade` | Semáforo por filial e módulo (`?filial_id=&data_base=`) |
-| GET | `/relatorios/:tipo` | PDF ou Excel (`?formato=pdf\|xlsx&data_base=&todas=true`): `conformidade`, `treinamentos`, `asos`, `ordens_servico`, `ppci` |
+| GET | `/relatorios/:tipo` | PDF ou Excel (`?formato=pdf\|xlsx&data_base=&todas=true`): `conformidade`, `treinamentos`, `asos`, `ordens_servico`, `ppci`, `ocorrencias` |
 | GET | `/relatorios-emitidos` | Relatórios emitidos nas filiais do usuário, com código e SHA-256 |
 | GET/POST | `/fechamentos` | Fechamento mensal da filial (POST pela gestão); `?filial_id=` lista também os meses em aberto |
 | GET | `/fechamentos/:id`, `/fechamentos/:id/conferencia` | Situação congelada / conferência do que mudou desde o fechamento |
@@ -321,7 +352,14 @@ O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 | GET/POST/PUT | `/fornecedores` | Fornecedores da filial |
 | GET | `/auditoria` | Log de auditoria (matriz) |
 | GET | `/status` | Saúde da API e do banco (público, para monitoramento) |
-| GET/POST | `/acidentes` | Acidentes de trabalho |
+| GET/POST/PUT | `/ocorrencias` | Acidentes, doença ocupacional, incidentes e quase-acidentes (+ `/:id/pdf`, `/:id/cancelar`) |
+| POST/PUT | `/ocorrencias/:id/vitimas`, `/ocorrencia-vitimas/:id` | Vítimas: lesão, afastamento, retorno, óbito, dados médicos (saude) |
+| POST | `/ocorrencias/:id/testemunhas`, `/ocorrencias/:id/anexos` | Testemunhas e anexos (fotos, laudos) |
+| POST | `/ocorrencia-vitimas/:id/cats`, `/cats/:id/anular` | CAT inicial, reabertura ou óbito / anulação (gestão) |
+| PUT/POST | `/ocorrencias/:id/investigacao`, `/ocorrencias/:id/concluir` | Investigação com causas / conclusão |
+| GET | `/ocorrencias/pendencias` | CAT fora do prazo ou a emitir, investigação atrasada (`?data_base=`) |
+| GET | `/ocorrencias/indicadores` | Taxa de frequência e de gravidade (NBR 14280) por filial e mês |
+| GET/PUT | `/horas-trabalhadas` | Horas-homem do mês por filial (base das taxas) |
 
 Todas as rotas, exceto `/ping` e `/auth/login`, exigem o cabeçalho `Authorization: Bearer <token>`.
 

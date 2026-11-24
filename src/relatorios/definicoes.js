@@ -3,6 +3,7 @@
 const { MODULOS } = require('../services/conformidade');
 const { EQUIPAMENTOS, AGENTES, nomeDaMedida } = require('../services/ppci');
 const { dataHoraBR } = require('./formatos');
+const { TIPOS: TIPOS_OCORRENCIA, GRAVIDADES } = require('../services/ocorrencias');
 
 const SITUACOES = {
   // treinamentos / ASO
@@ -16,7 +17,10 @@ const SITUACOES = {
   recarga_vencida: 'Recarga vencida', recarga_vencendo: 'Recarga vencendo', recarga_nao_registrada: 'Recarga sem registro',
   teste_hidrostatico_vencida: 'Teste hidrostático vencido', teste_hidrostatico_vencendo: 'Teste hidrostático vencendo',
   teste_hidrostatico_nao_registrada: 'Teste hidrostático sem registro',
-  manutencao_vencida: 'Manutenção vencida', manutencao_vencendo: 'Manutenção vencendo', manutencao_nao_registrada: 'Manutenção sem registro'
+  manutencao_vencida: 'Manutenção vencida', manutencao_vencendo: 'Manutenção vencendo', manutencao_nao_registrada: 'Manutenção sem registro',
+  // ocorrências
+  cat_pendente: 'CAT fora do prazo', cat_a_emitir: 'CAT a emitir (no prazo)', investigacao_atrasada: 'Investigação atrasada',
+  em_investigacao: 'Em investigação (no prazo)'
 };
 const rotulo = (s) => SITUACOES[s] || s;
 const CORES = { verde: 'Verde', amarelo: 'Amarelo', vermelho: 'Vermelho', cinza: 'Sem dados' };
@@ -101,6 +105,22 @@ const RELATORIOS = {
         if (i.nao_conformes) return [i.nao_conformes.join(', '), i.observacao].filter(Boolean).join(' — ');
         return '';
       } }
+    ]
+  },
+  ocorrencias: {
+    titulo: 'Ocorrências — CAT e investigação',
+    modulo: MODULOS.ocorrencias,
+    colunas: [
+      { titulo: 'Filial', largura: 105, valor: (i) => i.filial },
+      { titulo: 'Número', largura: 50, valor: (i) => i.numero },
+      { titulo: 'Tipo', largura: 90, valor: (i) => TIPOS_OCORRENCIA[i.tipo] },
+      { titulo: 'Data', largura: 50, valor: (i) => i.data, tipo: 'data' },
+      { titulo: 'Gravidade', largura: 50, valor: (i) => GRAVIDADES[i.gravidade] || '' },
+      { titulo: 'Local', largura: 115, valor: (i) => i.local },
+      { titulo: 'Situação', largura: 95, valor: (i) => rotulo(i.situacao) },
+      { titulo: 'Prazo da CAT', largura: 55, valor: (i) => i.prazo_cat, tipo: 'data' },
+      { titulo: 'CAT pendente de', largura: 95, valor: (i) => (i.cat_pendente_de || []).join(', ') },
+      { titulo: 'Prazo investigação', largura: 55, valor: (i) => i.prazo_investigacao, tipo: 'data' }
     ]
   }
 };

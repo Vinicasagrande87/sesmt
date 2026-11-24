@@ -4,12 +4,13 @@
 // O que entra: treinamentos, ASOs, alvarás, recarga/teste/manutenção e inspeção de equipamentos,
 // vigência do PGR, CA de EPI e lotes em estoque com validade — o que já venceu e o que vence até a data-limite.
 const { hoje, somarDias, somarMeses, diasEntre } = require('../utils/datas');
-const { dataBR } = require('../relatorios/formatos');
+const { dataBR, dataHoraBR } = require('../relatorios/formatos');
 const { rotulo } = require('../relatorios/definicoes');
 const { situacaoTreinamentos } = require('./treinamentos');
 const { situacaoAsos } = require('./asos');
 const { situacaoPpci, EQUIPAMENTOS } = require('./ppci');
 const { enviarEmail, emailAtivo } = require('./email');
+const { situacaoOcorrencias, TIPOS: TIPOS_OCORRENCIA } = require('./ocorrencias');
 
 const COMO_MATRIZ = { usuario: { perfil: 'admin', filiais: null } }; // os avisos olham todas as filiais
 const MANUTENCOES = { recarga: 'Recarga', teste_hidrostatico: 'Teste hidrostático', manutencao: 'Manutenção' };
@@ -72,8 +73,47 @@ async function montarAvisos(db, { dataHoje = hoje() } = {}) {
       descricao: `${l.nome}${l.tamanho && l.tamanho !== 'Único' ? ` (${l.tamanho})` : ''} — lote ${l.id}, ${l.saldo} em estoque` });
   }
 
+  // Ocorrências: CAT a emitir/atrasada e investigação com prazo
+  for (const o of await situacaoOcorrencias(db, COMO_MATRIZ, {})) {
+    if (['cat_pendente', 'cat_a_emitir'].includes(o.situacao) || o.cat_pendente_de.length) {
+      add({ modulo: 'CAT', filial_id: o.filial_id, filial: o.filial, data: o.prazo_cat,
+        descricao: `Ocorrência ${o.numero} (${TIPOS_OCORRENCIA[o.tipo]}) — CAT de ${o.cat_pendente_de.join(', ')}` });
+    }
+    if (o.prazo_investigacao) {
+      add({ modulo: 'Investigação de ocorrência', filial_id: o.filial_id, filial: o.filial, data: o.prazo_investigacao,
+        descricao: `Ocorrência ${o.numero} (${TIPOS_OCORRENCIA[o.tipo]}) — concluir a investigação` });
+    }
+  }
+
   itens.sort((a, b) => a.data.localeCompare(b.data) || a.filial.localeCompare(b.filial) || a.descricao.localeCompare(b.descricao));
   return { dataHoje, limite, itens };
+}
+
+// Aviso imediato ao registrar acidente/doença com empregado (prazo da CAT) ou ocorrência grave/fatal
+async function notificarOcorrencia(db, o) {
+  if (!emailAtivo()) return { enviado: false, motivo: 'email_nao_configurado' };
+  const comCat = o.prazo_cat && o.vitimas.some((v) => v.vinculo === 'empregado' && (v.houve_lesao || v.obito));
+  if (!comCat && !['grave', 'fatal'].includes(o.gravidade)) return { enviado: false, motivo: 'sem_urgencia' };
+  const pessoas = o.vitimas.map((v) => `${v.nome_vitima} (${v.vinculo})`).join(', ') || 'sem vítima';
+  const assunto = `SESMT — ${TIPOS_OCORRENCIA[o.tipo]} na ${o.filial}${comCat ? `: CAT até ${dataBR(o.prazo_cat)}` : ''}`;
+  const texto = [
+    `${TIPOS_OCORRENCIA[o.tipo]} nº ${o.numero} registrado(a) no sistema.`, '',
+    `Filial: ${o.filial}`, `Data: ${dataHoraBR(o.data_hora)}`,
+    `Local: ${o.local_descricao}`, `Gravidade: ${o.gravidade || o.gravidade_potencial || '—'}`, `Pessoas: ${pessoas}`, '',
+    comCat ? `A CAT deve ser emitida até ${dataBR(o.prazo_cat)} (Lei 8.213, art. 22). Registre o número no sistema.` : '',
+    `A investigação deve ser concluída em até 30 dias.`
+  ].filter((l) => l !== null).join('\n');
+  const resultado = [];
+  for (const dest of await destinatarios(db)) {
+    if (dest.filial_ids && !dest.filial_ids.includes(o.filial_id)) continue;
+    try {
+      await enviarEmail({ para: dest.email, assunto, texto: `Olá, ${dest.nome}.\n\n${texto}\n` });
+      resultado.push({ email: dest.email, enviado: true });
+    } catch (erro) {
+      resultado.push({ email: dest.email, enviado: false, erro: erro.message });
+    }
+  }
+  return { enviado: true, resultado };
 }
 
 // Admins ativos + destinatários extras ativos (mesmo e-mail nos dois: vale o de todas as filiais)
@@ -183,4 +223,4 @@ function iniciarAgendador(db) {
   return setInterval(verificar, 30 * 60 * 1000).unref();
 }
 
-module.exports = { janela, montarAvisos, destinatarios, itensDe, montarEmail, enviarAvisos, semanaIso, iniciarAgendador };
+module.exports = { janela, montarAvisos, destinatarios, itensDe, montarEmail, enviarAvisos, notificarOcorrencia, semanaIso, iniciarAgendador };

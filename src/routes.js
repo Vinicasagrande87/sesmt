@@ -12,7 +12,7 @@ const EstoqueController = require('./controllers/EstoqueController');
 const FornecedorController = require('./controllers/FornecedorController');
 const TransferenciaController = require('./controllers/TransferenciaController');
 const ArquivoController = require('./controllers/ArquivoController');
-const AcidenteController = require('./controllers/AcidenteController');
+const OcorrenciaController = require('./controllers/OcorrenciaController');
 const TreinamentoController = require('./controllers/TreinamentoController');
 const CertificadoController = require('./controllers/CertificadoController');
 const AuthController = require('./controllers/AuthController');
@@ -222,8 +222,26 @@ routes.get('/fechamentos/:id', FechamentoController.show);
 routes.get('/fechamentos/:id/conferencia', FechamentoController.conferencia);
 routes.get('/auditoria/integridade', matriz, FechamentoController.integridade);
 
-// Acidentes
-routes.get('/acidentes', AcidenteController.index);
-routes.post('/acidentes', operacao, AcidenteController.create);
+// Ocorrências: acidentes, doença ocupacional, incidentes e quase-acidentes, com CAT, investigação e indicadores (NBR 14280)
+routes.get('/ocorrencias', OcorrenciaController.index);
+routes.get('/ocorrencias/pendencias', OcorrenciaController.pendencias);
+routes.get('/ocorrencias/indicadores', OcorrenciaController.indicadores);
+routes.post('/ocorrencias', cadastroPessoal, OcorrenciaController.create);
+routes.get('/ocorrencias/:id', OcorrenciaController.show);
+routes.put('/ocorrencias/:id', operacao, OcorrenciaController.update);
+routes.get('/ocorrencias/:id/pdf', OcorrenciaController.pdf);
+routes.post('/ocorrencias/:id/vitimas', cadastroPessoal, OcorrenciaController.adicionarVitima);
+routes.post('/ocorrencias/:id/testemunhas', cadastroPessoal, OcorrenciaController.adicionarTestemunha);
+routes.put('/ocorrencias/:id/investigacao', operacao, OcorrenciaController.salvarInvestigacao);
+routes.post('/ocorrencias/:id/concluir', operacao, OcorrenciaController.concluir);
+routes.post('/ocorrencias/:id/cancelar', gestao, OcorrenciaController.cancelar);
+routes.post('/ocorrencias/:id/anexos', cadastroPessoal, OcorrenciaController.anexar);
+routes.get('/ocorrencia-anexos/:id', OcorrenciaController.anexo);
+routes.put('/ocorrencia-vitimas/:id', cadastroPessoal, OcorrenciaController.alterarVitima);
+routes.post('/ocorrencia-vitimas/:id/cats', cadastroPessoal, OcorrenciaController.registrarCat);
+routes.post('/cats/:id/anular', gestao, OcorrenciaController.anularCat);
+routes.get('/cats/:id/arquivo', OcorrenciaController.arquivoCat);
+routes.get('/horas-trabalhadas', OcorrenciaController.horas);
+routes.put('/horas-trabalhadas', gestao, OcorrenciaController.definirHoras);
 
 module.exports = routes;

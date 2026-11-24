@@ -5,6 +5,7 @@ const { situacaoTreinamentos } = require('./treinamentos');
 const { situacaoAsos } = require('./asos');
 const { situacaoOrdensServico } = require('./ordensServico');
 const { situacaoPpci, DIAS_EQUIPAMENTO, DIAS_ALVARA } = require('./ppci');
+const { situacaoOcorrencias } = require('./ocorrencias');
 
 const ORDEM_COR = ['cinza', 'verde', 'amarelo', 'vermelho'];
 const pior = (a, b) => (ORDEM_COR.indexOf(a) >= ORDEM_COR.indexOf(b) ? a : b);
@@ -43,6 +44,16 @@ const MODULOS = {
     calcular: (db, req, filtros, o) => situacaoPpci(db, req, filtros, o),
     chave: (i) => (i.nivel === 'predio' ? `p${i.predio_id}` : `e${i.equipamento_id}`),
     gravidade: (i) => (i.situacao.endsWith('_vencendo') ? 'amarelo' : 'vermelho')
+  },
+  // Ocorrências abertas ou dos últimos 12 meses: CAT fora do prazo ou investigação atrasada = vermelho
+  ocorrencias: {
+    nome: 'Ocorrências (CAT e investigação)',
+    async calcular(db, req, filtros, o) {
+      const itens = await situacaoOcorrencias(db, req, filtros, { dataBase: o.dataBase });
+      return { itens, unidades: itens.map((i) => ({ filial_id: i.filial_id, chave: `o${i.ocorrencia_id}` })) };
+    },
+    chave: (i) => `o${i.ocorrencia_id}`,
+    gravidade: (i) => (['cat_pendente', 'investigacao_atrasada'].includes(i.situacao) ? 'vermelho' : i.situacao === 'cat_a_emitir' ? 'amarelo' : null)
   }
 };
 
