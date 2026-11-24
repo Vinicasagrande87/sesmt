@@ -163,10 +163,17 @@ test('investigação: causas, conclusão exige CAT, depois fica travada', async 
   assert.equal(r.body.investigacao.causas.length, 2);
   assert.equal((await api('POST', `/ocorrencias/${ids.o1}/concluir`, { token: tk.tecA })).status, 409, 'sem conclusão escrita');
   assert.equal((await inv(ids.o1, { ...corpo, conclusao: 'Retirada da proteção sem controle; ferramenta não inspecionada.' })).status, 200);
+  const semAcao = await api('POST', `/ocorrencias/${ids.o1}/concluir`, { token: tk.tecA });
+  assert.equal(semAcao.status, 409, 'medida recomendada precisa virar ação');
+  assert.match(semAcao.body.error, /plano de ação/);
+  const acao = await api('POST', '/acoes', { token: tk.tecA, body: { filial_id: ids.A, titulo: 'Inspeção diária das ferramentas portáteis', prazo: somarDias(HOJE, 15),
+    origem_tipo: 'ocorrencia', origem_id: ids.o1, responsavel_nome: 'Supervisor da manutenção', tipo_medida: 'administrativa' } });
+  assert.equal(acao.status, 201, JSON.stringify(acao.body));
   const c = await api('POST', `/ocorrencias/${ids.o1}/concluir`, { token: tk.tecA });
   assert.equal(c.status, 200, JSON.stringify(c.body));
   assert.equal(c.body.status, 'concluida');
   assert.equal(c.body.situacao, 'em_dia');
+  assert.equal(c.body.acoes.length, 1, 'a ocorrência mostra as ações abertas a partir dela');
 
   assert.equal((await inv(ids.o1, corpo)).status, 409, 'travada');
   assert.equal((await api('PUT', `/ocorrencias/${ids.o1}`, { token: tk.tecA, body: { descricao: 'outra' } })).status, 409);
@@ -240,7 +247,7 @@ test('integrações: semáforo, relatório, resumo semanal e fechamento mensal',
 });
 
 test('migração: registros da tabela antiga de acidentes viram ocorrências (legado), sem perder nada', async () => {
-  await amb.knex.migrate.down(); // desfaz só a migration das ocorrências
+  await amb.knex.migrate.down({ name: '20261203100000_ocorrencias.js' }); // desfaz só a migration das ocorrências
   await amb.knex('acidentes_trabalho').insert({ funcionario_id: ids.ana, data_hora_acidente: new Date(`${D}T10:00:00-03:00`), local_acidente: 'Pátio',
     descricao_ocorrencia: 'Escorregou no piso molhado', parte_corpo_atingida: 'Tornozelo', houve_afastamento: true, dias_afastado: 3, cat_emitida: true });
   await amb.knex.migrate.latest();

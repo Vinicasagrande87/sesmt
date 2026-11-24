@@ -187,6 +187,27 @@ A ideia é usar o conhecimento técnico da área para construir uma ferramenta q
   - CAT, testemunhas e anexos na impressão digital do fechamento mensal.
 - Os registros da tabela antiga de acidentes foram copiados como ocorrências de legado. A tabela antiga ficou guardada.
 
+### Plano de ação (NR-1)
+- **Cada ação tem:**
+  - o quê e como;
+  - a origem: ocorrência, PGR, inspeção de incêndio, prédio (PPCI) ou outra (visita, auditoria, reunião);
+  - a hierarquia de controle da NR-1 (eliminação, substituição, engenharia, administrativa, EPI);
+  - prioridade, prazo e custo estimado/real;
+  - o responsável: um usuário da filial ou um nome sem login, como uma empresa contratada.
+- **Ciclo PDCA:**
+  - aberta → em andamento → concluída **com evidência** (texto + foto ou documento) → **verificação de eficácia**;
+  - quem verifica é outra pessoa da equipe de SST, não quem concluiu;
+  - ação ineficaz reabre.
+- **O responsável registra o andamento e conclui a própria ação**, mesmo com perfil consulta, e recebe e-mail quando ganha uma ação.
+- **Prazo:** só a gestão reprograma, com motivo. O prazo original e cada reprogramação ficam guardados.
+- **Só inclusão:** a linha do tempo e o histórico de prazos não se alteram nem se apagam.
+- **Na ocorrência:** se a investigação recomenda medidas, a ocorrência só conclui com ao menos uma ação aberta no plano.
+- **Integrações:**
+  - pendências com situação "como estava em uma data";
+  - módulo no semáforo e relatório PDF/Excel;
+  - resumo semanal por e-mail, em que cada responsável recebe as suas ações;
+  - linha do tempo e reprogramações na impressão digital do fechamento mensal.
+
 ### Estrutura e controle
 - **Estrutura multi-filial:** matriz → filiais (cada uma com CNPJ próprio, UF, cidade e bairro) → prédios e setores. Funções num catálogo único do grupo.
 - **Permissões por perfil e por filial:**
@@ -270,7 +291,7 @@ npm test
 O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 - sobe um banco temporário;
 - roda as migrations;
-- testa permissões, filtragem por filial, lotação, auditoria, entregas, estoque, treinamentos, ASOs, PGR, ordens de serviço, PPCI, relatórios, integridade (travas do banco, cadeia de hash e fechamento mensal), contas, avisos por e-mail e ocorrências (CAT, investigação e indicadores);
+- testa permissões, filtragem por filial, lotação, auditoria, entregas, estoque, treinamentos, ASOs, PGR, ordens de serviço, PPCI, relatórios, integridade (travas do banco, cadeia de hash e fechamento mensal), contas, avisos por e-mail ocorrências (CAT, investigação e indicadores) e plano de ação;
 - apaga tudo no fim.
 
 ## Principais rotas
@@ -304,7 +325,7 @@ O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 | POST | `/entregas/:id/estorno` | Estorno de entrega (gestão) |
 | GET | `/verificar/:codigo` | Verificação pública de entrega, presença, certificado, ciência de OS, inspeção de incêndio, relatório ou fechamento |
 | GET | `/painel/conformidade` | Semáforo por filial e módulo (`?filial_id=&data_base=`) |
-| GET | `/relatorios/:tipo` | PDF ou Excel (`?formato=pdf\|xlsx&data_base=&todas=true`): `conformidade`, `treinamentos`, `asos`, `ordens_servico`, `ppci`, `ocorrencias` |
+| GET | `/relatorios/:tipo` | PDF ou Excel (`?formato=pdf\|xlsx&data_base=&todas=true`): `conformidade`, `treinamentos`, `asos`, `ordens_servico`, `ppci`, `ocorrencias`, `acoes` |
 | GET | `/relatorios-emitidos` | Relatórios emitidos nas filiais do usuário, com código e SHA-256 |
 | GET/POST | `/fechamentos` | Fechamento mensal da filial (POST pela gestão); `?filial_id=` lista também os meses em aberto |
 | GET | `/fechamentos/:id`, `/fechamentos/:id/conferencia` | Situação congelada / conferência do que mudou desde o fechamento |
@@ -360,6 +381,11 @@ O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 | GET | `/ocorrencias/pendencias` | CAT fora do prazo ou a emitir, investigação atrasada (`?data_base=`) |
 | GET | `/ocorrencias/indicadores` | Taxa de frequência e de gravidade (NBR 14280) por filial e mês |
 | GET/PUT | `/horas-trabalhadas` | Horas-homem do mês por filial (base das taxas) |
+| GET/POST/PUT | `/acoes` | Plano de ação: origem, medida, responsável, prazo (+ `/minhas`) |
+| POST | `/acoes/:id/andamento`, `/acoes/:id/concluir` | Andamento e conclusão com evidência (responsável ou equipe) |
+| POST | `/acoes/:id/verificar` | Verificação de eficácia por outra pessoa (ineficaz reabre) |
+| POST | `/acoes/:id/prazo`, `/acoes/:id/cancelar` | Reprogramação com motivo / cancelamento (gestão) |
+| GET | `/acoes/pendencias` | Atrasadas e vencendo (`?data_base=`, `?responsavel_id=`) |
 
 Todas as rotas, exceto `/ping` e `/auth/login`, exigem o cabeçalho `Authorization: Bearer <token>`.
 

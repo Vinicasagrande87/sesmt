@@ -36,7 +36,7 @@ app.use(helmet({
 const origensPermitidas = (process.env.CORS_ORIGINS || '').split(',').map((o) => o.trim()).filter(Boolean);
 app.use(cors({ origin: (origem, ok) => ok(null, !!origem && origensPermitidas.includes(origem)) }));
 // Corpo maior só nas rotas que recebem arquivo (foto da entrega, termo de adesão); o resto fica pequeno
-app.use(['/entregas', '/funcionarios/:id/termo', '/certificados', '/asos', '/pgrs', '/ordens-servico', '/ppcis', '/alvaras', '/equipamentos-incendio', '/ocorrencias', '/ocorrencia-vitimas'], express.json({ limit: '15mb' }));
+app.use(['/entregas', '/funcionarios/:id/termo', '/certificados', '/asos', '/pgrs', '/ordens-servico', '/ppcis', '/alvaras', '/equipamentos-incendio', '/ocorrencias', '/ocorrencia-vitimas', '/acoes'], express.json({ limit: '15mb' }));
 app.use(express.json({ limit: '200kb' }));
 
 // Arquivos estáticos (ex.: /leitor.html)

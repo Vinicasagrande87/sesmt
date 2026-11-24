@@ -13,6 +13,7 @@ const FornecedorController = require('./controllers/FornecedorController');
 const TransferenciaController = require('./controllers/TransferenciaController');
 const ArquivoController = require('./controllers/ArquivoController');
 const OcorrenciaController = require('./controllers/OcorrenciaController');
+const AcaoController = require('./controllers/AcaoController');
 const TreinamentoController = require('./controllers/TreinamentoController');
 const CertificadoController = require('./controllers/CertificadoController');
 const AuthController = require('./controllers/AuthController');
@@ -241,6 +242,20 @@ routes.put('/ocorrencia-vitimas/:id', cadastroPessoal, OcorrenciaController.alte
 routes.post('/ocorrencia-vitimas/:id/cats', cadastroPessoal, OcorrenciaController.registrarCat);
 routes.post('/cats/:id/anular', gestao, OcorrenciaController.anularCat);
 routes.get('/cats/:id/arquivo', OcorrenciaController.arquivoCat);
+// Plano de ação (NR-1): origem, responsável, prazo, andamento, conclusão com evidência e verificação de eficácia
+routes.get('/acoes', AcaoController.index);
+routes.get('/acoes/minhas', AcaoController.minhas);
+routes.get('/acoes/pendencias', AcaoController.pendencias);
+routes.post('/acoes', operacao, AcaoController.create);
+routes.get('/acoes/:id', AcaoController.show);
+routes.put('/acoes/:id', operacao, AcaoController.update);
+routes.post('/acoes/:id/andamento', AcaoController.andamento);           // responsável ou equipe (conferido no controller)
+routes.post('/acoes/:id/concluir', AcaoController.concluir);             // responsável ou equipe
+routes.post('/acoes/:id/verificar', operacao, AcaoController.verificar);
+routes.post('/acoes/:id/prazo', gestao, AcaoController.reprogramar);
+routes.post('/acoes/:id/cancelar', gestao, AcaoController.cancelar);
+routes.get('/acao-registros/:id/arquivo', AcaoController.arquivo);
+
 routes.get('/horas-trabalhadas', OcorrenciaController.horas);
 routes.put('/horas-trabalhadas', gestao, OcorrenciaController.definirHoras);
 

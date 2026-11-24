@@ -11,6 +11,7 @@ const { situacaoAsos } = require('./asos');
 const { situacaoPpci, EQUIPAMENTOS } = require('./ppci');
 const { enviarEmail, emailAtivo } = require('./email');
 const { situacaoOcorrencias, TIPOS: TIPOS_OCORRENCIA } = require('./ocorrencias');
+const { situacaoAcoes } = require('./acoes');
 
 const COMO_MATRIZ = { usuario: { perfil: 'admin', filiais: null } }; // os avisos olham todas as filiais
 const MANUTENCOES = { recarga: 'Recarga', teste_hidrostatico: 'Teste hidrostático', manutencao: 'Manutenção' };
@@ -85,8 +86,42 @@ async function montarAvisos(db, { dataHoje = hoje() } = {}) {
     }
   }
 
+  // Plano de ação: abertas com prazo até a data-limite (o responsável também recebe as suas)
+  for (const a of await situacaoAcoes(db, COMO_MATRIZ, {}, { dias })) {
+    if (!['atrasada', 'vence_em_breve'].includes(a.situacao)) continue;
+    add({ modulo: 'Plano de ação', filial_id: a.filial_id, filial: a.filial, data: a.prazo, responsavel_id: a.responsavel_id,
+      descricao: `Ação ${a.numero}: ${a.titulo} — responsável: ${a.responsavel}${a.reprogramacoes ? ` (prazo reprogramado ${a.reprogramacoes}x)` : ''}` });
+  }
+
   itens.sort((a, b) => a.data.localeCompare(b.data) || a.filial.localeCompare(b.filial) || a.descricao.localeCompare(b.descricao));
   return { dataHoje, limite, itens };
+}
+
+// Quem recebe esta rodada: admins + destinatários + responsáveis por ações (só as suas, se não estiverem na lista)
+async function destinatariosDaRodada(db, itens) {
+  const lista = await destinatarios(db);
+  const ja = new Set(lista.map((d) => d.email));
+  const ids = [...new Set(itens.filter((i) => i.responsavel_id).map((i) => i.responsavel_id))];
+  if (ids.length) {
+    for (const u of await db('usuarios').whereIn('id', ids).where('ativo', true).select('id', 'nome', 'email')) {
+      const email = u.email.toLowerCase();
+      if (!ja.has(email)) lista.push({ nome: u.nome, email, origem: 'responsavel', filial_ids: null, somente_responsavel_id: u.id });
+    }
+  }
+  return lista;
+}
+
+// E-mail ao responsável quando recebe uma ação
+async function notificarResponsavel(db, acao, usuario) {
+  if (!emailAtivo() || !usuario || !usuario.email) return { enviado: false };
+  await enviarEmail({
+    para: usuario.email,
+    assunto: `SESMT — ação ${acao.numero} sob sua responsabilidade (prazo ${dataBR(acao.prazo)})`,
+    texto: [`Olá, ${usuario.nome}.`, '', `Você é o responsável pela ação ${acao.numero} do plano de ação da ${acao.filial}:`, '',
+      acao.titulo, acao.descricao || '', '', `Origem: ${acao.origem_descricao}`, `Prazo: ${dataBR(acao.prazo)}`, `Prioridade: ${acao.prioridade}`, '',
+      'Registre o andamento e a conclusão (com a evidência) no sistema.'].join('\n')
+  });
+  return { enviado: true };
 }
 
 // Aviso imediato ao registrar acidente/doença com empregado (prazo da CAT) ou ocorrência grave/fatal
@@ -129,8 +164,11 @@ async function destinatarios(db) {
   return [...lista.values()];
 }
 
-// Só as filiais do destinatário; CA do catálogo vai para quem recebe todas
-const itensDe = (dest, itens) => (dest.filial_ids ? itens.filter((i) => i.filial_id !== null && dest.filial_ids.includes(i.filial_id)) : itens);
+// Só as filiais do destinatário (CA do catálogo vai para quem recebe todas); responsável: só as próprias ações
+function itensDe(dest, itens) {
+  if (dest.somente_responsavel_id) return itens.filter((i) => i.responsavel_id === dest.somente_responsavel_id);
+  return dest.filial_ids ? itens.filter((i) => i.filial_id !== null && dest.filial_ids.includes(i.filial_id)) : itens;
+}
 
 const escapar = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -171,7 +209,7 @@ async function enviarAvisos(db, { referencia, tipo = 'automatico', usuarioId = n
     throw erro;
   }
   const resultado = [];
-  for (const dest of await destinatarios(db)) {
+  for (const dest of await destinatariosDaRodada(db, itens)) {
     const meus = itensDe(dest, itens);
     if (!meus.length) { resultado.push({ email: dest.email, itens: 0, enviado: false, motivo: 'nada_a_vencer' }); continue; }
     try {
@@ -223,4 +261,7 @@ function iniciarAgendador(db) {
   return setInterval(verificar, 30 * 60 * 1000).unref();
 }
 
-module.exports = { janela, montarAvisos, destinatarios, itensDe, montarEmail, enviarAvisos, notificarOcorrencia, semanaIso, iniciarAgendador };
+module.exports = {
+  janela, montarAvisos, destinatarios, destinatariosDaRodada, itensDe, montarEmail, enviarAvisos, notificarOcorrencia, notificarResponsavel,
+  semanaIso, iniciarAgendador
+};

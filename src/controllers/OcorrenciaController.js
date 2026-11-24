@@ -214,7 +214,10 @@ async function carregar(db, req, o) {
   const filial = await db('filiais').where({ id: o.filial_id }).first('nome', 'razao_social', 'cnpj', 'cidade', 'uf');
   const predio = o.predio_id ? await db('predios').where({ id: o.predio_id }).first('nome') : null;
   const setor = o.setor_id ? await db('setores').where({ id: o.setor_id }).first('nome') : null;
+  const acoes = await db('acoes as a').leftJoin('usuarios as u', 'u.id', 'a.responsavel_id').where({ 'a.origem_tipo': 'ocorrencia', 'a.origem_id': o.id })
+    .orderBy('a.id').select('a.id', 'a.ano', 'a.sequencial', 'a.titulo', 'a.prazo', 'a.status', db.raw('coalesce(u.nome, a.responsavel_nome) as responsavel'));
   return {
+    acoes: acoes.map((a) => ({ ...a, numero: `${a.ano}/${String(a.sequencial).padStart(4, '0')}` })),
     ...o, numero: O.numero(o), filial: filial.nome, filial_dados: filial, predio: predio && predio.nome, setor: setor && setor.nome,
     situacao: situacao ? situacao.situacao : (o.status === 'cancelada' ? 'cancelada' : 'em_dia'),
     prazo_cat: O.EXIGE_CAT.includes(o.tipo) ? prazo : null,
@@ -427,6 +430,11 @@ module.exports = {
           .whereNotExists(trx('cats as c').leftJoin('cat_anulacoes as n', 'n.cat_id', 'c.id').whereRaw('c.vitima_id = v.id').whereNull('n.id').whereIn('c.tipo', ['inicial', 'obito']))
           .pluck('f.nome');
         if (semCat.length) throw new ErroDeNegocio(409, `Registre a CAT antes de concluir: ${semCat.join(', ')}`);
+      }
+      // Medida recomendada vira ação com responsável e prazo (NR-1): sem nenhuma ação aberta, não conclui
+      const medidas = inv.medidas_recomendadas || [];
+      if (medidas.length && !(await trx('acoes').where({ origem_tipo: 'ocorrencia', origem_id: o.id }).whereNot('status', 'cancelada').first('id'))) {
+        throw new ErroDeNegocio(409, `A investigação recomenda ${medidas.length} medida(s): abra as ações no plano de ação antes de concluir`);
       }
       const [depois] = await trx('ocorrencias').where({ id: o.id })
         .update({ status: 'concluida', concluida_em: trx.fn.now(), concluida_por: req.usuario.id, updated_at: trx.fn.now() }).returning('*');

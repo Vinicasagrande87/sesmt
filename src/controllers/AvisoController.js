@@ -5,7 +5,7 @@ const { ErroDeNegocio } = require('../utils/erros');
 const { auditar } = require('../utils/auditoria');
 const { idValido } = require('../utils/validacao');
 const { emailAtivo } = require('../services/email');
-const { montarAvisos, destinatarios, itensDe, enviarAvisos } = require('../services/avisos');
+const { montarAvisos, destinatariosDaRodada, itensDe, enviarAvisos } = require('../services/avisos');
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -69,7 +69,7 @@ module.exports = {
   // GET /avisos/previa — o que iria hoje e para quem, sem enviar
   async previa(req, res) {
     const { limite, itens } = await montarAvisos(knex);
-    const dests = (await destinatarios(knex)).map((d) => ({ ...d, itens: itensDe(d, itens).length }));
+    const dests = (await destinatariosDaRodada(knex, itens)).map((d) => ({ ...d, itens: itensDe(d, itens).length }));
     return res.json({ email_configurado: emailAtivo(), limite, total_itens: itens.length, destinatarios: dests, itens });
   },
 

@@ -4,6 +4,7 @@ const { MODULOS } = require('../services/conformidade');
 const { EQUIPAMENTOS, AGENTES, nomeDaMedida } = require('../services/ppci');
 const { dataHoraBR } = require('./formatos');
 const { TIPOS: TIPOS_OCORRENCIA, GRAVIDADES } = require('../services/ocorrencias');
+const { TIPOS_MEDIDA } = require('../services/acoes');
 
 const SITUACOES = {
   // treinamentos / ASO
@@ -20,7 +21,9 @@ const SITUACOES = {
   manutencao_vencida: 'Manutenção vencida', manutencao_vencendo: 'Manutenção vencendo', manutencao_nao_registrada: 'Manutenção sem registro',
   // ocorrências
   cat_pendente: 'CAT fora do prazo', cat_a_emitir: 'CAT a emitir (no prazo)', investigacao_atrasada: 'Investigação atrasada',
-  em_investigacao: 'Em investigação (no prazo)'
+  em_investigacao: 'Em investigação (no prazo)',
+  // plano de ação
+  atrasada: 'Atrasada', vence_em_breve: 'Vence em breve', no_prazo: 'No prazo', concluida: 'Concluída (aguarda verificação)', verificada: 'Verificada (eficaz)'
 };
 const rotulo = (s) => SITUACOES[s] || s;
 const CORES = { verde: 'Verde', amarelo: 'Amarelo', vermelho: 'Vermelho', cinza: 'Sem dados' };
@@ -121,6 +124,21 @@ const RELATORIOS = {
       { titulo: 'Prazo da CAT', largura: 55, valor: (i) => i.prazo_cat, tipo: 'data' },
       { titulo: 'CAT pendente de', largura: 95, valor: (i) => (i.cat_pendente_de || []).join(', ') },
       { titulo: 'Prazo investigação', largura: 55, valor: (i) => i.prazo_investigacao, tipo: 'data' }
+    ]
+  },
+  acoes: {
+    titulo: 'Plano de ação',
+    modulo: MODULOS.acoes,
+    colunas: [
+      { titulo: 'Filial', largura: 90, valor: (i) => i.filial },
+      { titulo: 'Nº', largura: 45, valor: (i) => i.numero },
+      { titulo: 'Ação', largura: 165, valor: (i) => i.titulo },
+      { titulo: 'Origem', largura: 120, valor: (i) => i.origem },
+      { titulo: 'Medida', largura: 70, valor: (i) => TIPOS_MEDIDA[i.tipo_medida] || '' },
+      { titulo: 'Responsável', largura: 90, valor: (i) => i.responsavel },
+      { titulo: 'Prazo', largura: 50, valor: (i) => i.prazo, tipo: 'data' },
+      { titulo: 'Situação', largura: 80, valor: (i) => rotulo(i.situacao) + (i.dias_atraso ? ` (${i.dias_atraso} dias)` : '') },
+      { titulo: 'Reprog.', largura: 40, valor: (i) => i.reprogramacoes || '' }
     ]
   }
 };

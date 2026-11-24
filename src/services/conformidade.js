@@ -6,6 +6,7 @@ const { situacaoAsos } = require('./asos');
 const { situacaoOrdensServico } = require('./ordensServico');
 const { situacaoPpci, DIAS_EQUIPAMENTO, DIAS_ALVARA } = require('./ppci');
 const { situacaoOcorrencias } = require('./ocorrencias');
+const { situacaoAcoes } = require('./acoes');
 
 const ORDEM_COR = ['cinza', 'verde', 'amarelo', 'vermelho'];
 const pior = (a, b) => (ORDEM_COR.indexOf(a) >= ORDEM_COR.indexOf(b) ? a : b);
@@ -54,6 +55,16 @@ const MODULOS = {
     },
     chave: (i) => `o${i.ocorrencia_id}`,
     gravidade: (i) => (['cat_pendente', 'investigacao_atrasada'].includes(i.situacao) ? 'vermelho' : i.situacao === 'cat_a_emitir' ? 'amarelo' : null)
+  },
+  // Plano de ação: atrasada = vermelho; vence em até 30 dias = amarelo
+  acoes: {
+    nome: 'Plano de ação',
+    async calcular(db, req, filtros, o) {
+      const itens = await situacaoAcoes(db, req, filtros, { dias: o.dias, dataBase: o.dataBase });
+      return { itens, unidades: itens.map((i) => ({ filial_id: i.filial_id, chave: `a${i.acao_id}` })) };
+    },
+    chave: (i) => `a${i.acao_id}`,
+    gravidade: (i) => (i.situacao === 'atrasada' ? 'vermelho' : i.situacao === 'vence_em_breve' ? 'amarelo' : null)
   }
 };
 
