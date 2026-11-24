@@ -27,6 +27,7 @@ const PpciController = require('./controllers/PpciController');
 const EquipamentoIncendioController = require('./controllers/EquipamentoIncendioController');
 const RelatorioController = require('./controllers/RelatorioController');
 const FechamentoController = require('./controllers/FechamentoController');
+const AvisoController = require('./controllers/AvisoController');
 const { autenticar, permitir } = require('./middlewares/auth');
 
 // Quem pode o quê (o filtro por filial é feito dentro de cada controller)
@@ -39,6 +40,8 @@ const saude = permitir('admin', 'saude');                           // ASOs (dad
 // Rotas públicas
 routes.get('/ping', (req, res) => res.json({ message: 'pong' }));
 routes.post('/auth/login', AuthController.login);
+routes.post('/auth/esqueci', AuthController.esqueciSenha);
+routes.post('/auth/redefinir', AuthController.redefinirSenha);
 routes.get('/verificar/:codigo', VerificacaoController.verificar);
 
 // Daqui para baixo, tudo exige "Authorization: Bearer <token>".
@@ -46,11 +49,21 @@ routes.get('/verificar/:codigo', VerificacaoController.verificar);
 routes.use(autenticar);
 
 routes.get('/auth/me', AuthController.me);
+routes.post('/auth/senha', AuthController.trocarSenha);
 
 // Usuários e auditoria (matriz)
 routes.get('/usuarios', matriz, UsuarioController.index);
 routes.post('/usuarios', matriz, UsuarioController.create);
 routes.put('/usuarios/:id', matriz, UsuarioController.update);
+routes.post('/usuarios/:id/encerrar-sessoes', matriz, UsuarioController.encerrarSessoes);
+
+// Avisos de vencimento por e-mail (1 mês de antecedência): admins + destinatários extras
+routes.get('/avisos/destinatarios', matriz, AvisoController.destinatarios);
+routes.post('/avisos/destinatarios', matriz, AvisoController.criarDestinatario);
+routes.put('/avisos/destinatarios/:id', matriz, AvisoController.alterarDestinatario);
+routes.get('/avisos/previa', matriz, AvisoController.previa);
+routes.post('/avisos/enviar', matriz, AvisoController.enviar);
+routes.get('/avisos/envios', matriz, AvisoController.envios);
 routes.get('/auditoria', matriz, AuditoriaController.index);
 
 // Estrutura

@@ -14,3 +14,6 @@ app.listen(PORT, () => {
 const selar = () => selarAuditoria(knex).catch((erro) => console.warn(`Selagem da auditoria adiada: ${erro.message}`));
 selar();
 setInterval(selar, 60 * 1000).unref();
+
+// Avisos de vencimento por e-mail (semanal, 1 mês de antecedência)
+require('./services/avisos').iniciarAgendador(knex);

@@ -3,6 +3,7 @@
 require('dotenv').config();
 const bcrypt = require('bcryptjs');
 const knex = require('./db');
+const { validarSenha } = require('../utils/senha');
 
 async function main() {
   const [nome, email, senha] = process.argv.slice(2);
@@ -11,8 +12,10 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  if (senha.length < 8) {
-    console.error('A senha precisa ter pelo menos 8 caracteres.');
+  try {
+    validarSenha(senha, email);
+  } catch (erro) {
+    console.error(erro.message);
     process.exitCode = 1;
     return;
   }
@@ -22,7 +25,9 @@ async function main() {
   const existente = await knex('usuarios').where({ email: emailNormalizado }).first('id');
 
   if (existente) {
-    await knex('usuarios').where({ id: existente.id }).update({ nome, senha_hash, perfil: 'admin', ativo: true });
+    // Senha nova: as sessões abertas desse usuário caem
+    await knex('usuarios').where({ id: existente.id })
+      .update({ nome, senha_hash, perfil: 'admin', ativo: true, sessao_versao: knex.raw('sessao_versao + 1'), senha_alterada_em: knex.fn.now() });
     console.log(`Admin atualizado: ${emailNormalizado}`);
   } else {
     await knex('usuarios').insert({ nome, email: emailNormalizado, senha_hash, perfil: 'admin' });

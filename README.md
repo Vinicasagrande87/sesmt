@@ -176,6 +176,21 @@ A ideia é usar o conhecimento técnico da área para construir uma ferramenta q
 - **Log de auditoria:** quem fez o quê, quando, de qual IP, com os dados antes e depois. Senhas e chaves de crachá nunca aparecem no log.
 - **Validações:** CPF, CNPJ e UF; matrícula única por CNPJ; CPF único no grupo.
 - **Autenticação com JWT** conferida no banco a cada requisição: um usuário desativado perde o acesso na hora.
+- **Contas protegidas:**
+  - login bloqueado por 15 minutos após 5 erros na mesma conta, ou 30 erros pelo mesmo IP;
+  - o usuário troca a própria senha, e as outras sessões abertas caem;
+  - "esqueci a senha": link por e-mail que vale 1 hora e uma vez (o banco guarda só o hash do token);
+  - a matriz pode encerrar todas as sessões de alguém, por exemplo se o celular foi perdido.
+- **Cabeçalhos de segurança** (`helmet`, com política de conteúdo) e **CORS fechado**: só os sites listados em `CORS_ORIGINS` chamam a API pelo navegador.
+
+### Avisos de vencimento por e-mail
+- **Toda semana** (segunda, 7h, configurável), sai um e-mail com o que já venceu e o que vence **no próximo mês**:
+  - treinamentos e ASOs (inclusive o prazo do demissional);
+  - alvará, recarga, teste hidrostático, manutenção e inspeção mensal dos equipamentos;
+  - vigência do PGR;
+  - CA dos EPIs e lotes em estoque com validade.
+- **Quem recebe:** todos os admins ativos (todas as filiais), mais os destinatários que a matriz cadastrar. Cada destinatário pode receber todas as filiais ou só algumas.
+- **E-mails só no banco:** os endereços nunca ficam no código. Prévia, envio manual e histórico ficam em `/avisos`. A mesma semana nunca é enviada duas vezes.
 
 ## Em construção (roadmap)
 
@@ -197,6 +212,7 @@ O modelo completo está sendo desenhado junto com a rotina real de um SESMT com 
 - **JWT** (`jsonwebtoken`) e **bcrypt** (`bcryptjs`) para autenticação
 - **qrcode** para gerar os QR codes e **html5-qrcode** para a leitura pela câmera
 - **pdfkit** e **exceljs** para os PDFs e planilhas
+- **nodemailer** (SMTP) para os e-mails e **helmet** para os cabeçalhos de segurança
 - **Testes:** `node:test` + **embedded-postgres**, que roda os testes num PostgreSQL real e temporário, sem depender do banco online
 
 ## Como rodar
@@ -210,6 +226,8 @@ npm run criar-admin -- "Seu Nome" voce@exemplo.com "uma-senha-forte"
 npm run dev
 ```
 
+Para os e-mails (avisos e "esqueci a senha"), preencha `SMTP_*`, `EMAIL_REMETENTE` e `APP_URL` no `.env`. Todo admin recebe os avisos. Outras pessoas são cadastradas em `POST /avisos/destinatarios`.
+
 O leitor fica em `http://localhost:3000/leitor.html`. No celular, a câmera só abre por **HTTPS**: use o ambiente de produção ou um túnel (por exemplo, `npx localtunnel --port 3000`).
 
 ### Testes
@@ -221,16 +239,22 @@ npm test
 O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 - sobe um banco temporário;
 - roda as migrations;
-- testa permissões, filtragem por filial, lotação, auditoria, entregas, estoque, treinamentos, ASOs, PGR, ordens de serviço, PPCI, relatórios e integridade (travas do banco, cadeia de hash e fechamento mensal);
+- testa permissões, filtragem por filial, lotação, auditoria, entregas, estoque, treinamentos, ASOs, PGR, ordens de serviço, PPCI, relatórios, integridade (travas do banco, cadeia de hash e fechamento mensal), contas e avisos por e-mail;
 - apaga tudo no fim.
 
 ## Principais rotas
 
 | Método | Rota | Descrição |
 |---|---|---|
-| POST | `/auth/login` | Login, devolve o token JWT e as filiais do usuário |
+| POST | `/auth/login` | Login, devolve o token JWT e as filiais do usuário (com limite de tentativas) |
 | GET | `/auth/me` | Usuário logado |
+| POST | `/auth/senha` | O usuário troca a própria senha (as outras sessões caem) |
+| POST | `/auth/esqueci`, `/auth/redefinir` | Link de redefinição por e-mail / criar a nova senha (`/redefinir-senha.html`) |
 | GET/POST/PUT | `/usuarios` | Usuários e suas filiais (matriz) |
+| POST | `/usuarios/:id/encerrar-sessoes` | Derruba todos os logins abertos do usuário (matriz) |
+| GET/POST/PUT | `/avisos/destinatarios` | Quem recebe os avisos além dos admins (matriz) |
+| GET | `/avisos/previa`, `/avisos/envios` | O que seria enviado hoje / histórico de envios (matriz) |
+| POST | `/avisos/enviar` | Envia os avisos agora (matriz) |
 | GET/POST/PUT | `/filiais` | Filiais: CNPJ, UF, cidade, bairro (cadastro pela matriz) |
 | GET/POST/PUT | `/predios`, `/setores` | Prédios e setores de cada filial |
 | GET/POST/PUT | `/funcoes` | Catálogo de funções (matriz) |

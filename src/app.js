@@ -3,6 +3,7 @@ require('dotenv').config();
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const routes = require('./routes');
 const knex = require('./database/db');
 const { tratarErros } = require('./utils/erros');
@@ -11,7 +12,29 @@ const { agendarSelagem } = require('./services/integridade');
 const app = express();
 
 app.set('trust proxy', 1); // atrás do proxy HTTPS da nuvem: req.ip passa a ser o IP real
-app.use(cors());
+
+// Cabeçalhos de segurança. As páginas de celular usam script na própria página e o leitor de QR do unpkg.
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", 'https://unpkg.com'],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'blob:'],
+      mediaSrc: ["'self'", 'blob:'],
+      workerSrc: ["'self'", 'blob:'],
+      connectSrc: ["'self'"],
+      frameAncestors: ["'none'"],
+      upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null // em http://localhost não força https
+    }
+  },
+  crossOriginEmbedderPolicy: false
+}));
+
+// CORS: as páginas do próprio sistema não precisam. Outro site (ex.: um front-end separado) só se
+// estiver em CORS_ORIGINS (lista separada por vírgula).
+const origensPermitidas = (process.env.CORS_ORIGINS || '').split(',').map((o) => o.trim()).filter(Boolean);
+app.use(cors({ origin: (origem, ok) => ok(null, !!origem && origensPermitidas.includes(origem)) }));
 // Corpo maior só nas rotas que recebem arquivo (foto da entrega, termo de adesão); o resto fica pequeno
 app.use(['/entregas', '/funcionarios/:id/termo', '/certificados', '/asos', '/pgrs', '/ordens-servico', '/ppcis', '/alvaras', '/equipamentos-incendio'], express.json({ limit: '15mb' }));
 app.use(express.json({ limit: '200kb' }));

@@ -5,6 +5,7 @@ const { PERFIS } = require('../middlewares/auth');
 const { ErroDeNegocio } = require('../utils/erros');
 const { auditar } = require('../utils/auditoria');
 const { exigirCampos, idValido } = require('../utils/validacao');
+const { validarSenha } = require('../utils/senha');
 
 async function filiaisDoUsuario(trx, usuarioId) {
   return trx('usuario_filiais as uf')
@@ -31,9 +32,6 @@ async function gravarFiliais(trx, usuarioId, ids) {
   if (ids.length) await trx('usuario_filiais').insert(ids.map((filial_id) => ({ usuario_id: usuarioId, filial_id })));
 }
 
-function validarSenha(senha) {
-  if (String(senha).length < 8) throw new ErroDeNegocio(400, 'A senha precisa ter pelo menos 8 caracteres');
-}
 
 module.exports = {
   // GET /usuarios
@@ -54,7 +52,7 @@ module.exports = {
   async create(req, res) {
     exigirCampos(req.body, ['nome', 'email', 'senha']);
     const { nome, email, senha, perfil = 'tecnico', filiais } = req.body;
-    validarSenha(senha);
+    validarSenha(senha, email);
     if (!PERFIS.includes(perfil)) throw new ErroDeNegocio(400, `perfil deve ser: ${PERFIS.join(', ')}`);
 
     const emailNormalizado = String(email).trim().toLowerCase();
@@ -83,12 +81,13 @@ module.exports = {
     if (perfil !== undefined && !PERFIS.includes(perfil)) {
       throw new ErroDeNegocio(400, `perfil deve ser: ${PERFIS.join(', ')}`);
     }
-    if (senha !== undefined) validarSenha(senha);
+    if (!idValido(req.params.id)) throw new ErroDeNegocio(404, 'Usuário não encontrado');
 
     const usuario = await knex.transaction(async (trx) => {
       const antes = await trx('usuarios').where({ id: req.params.id }).forUpdate()
         .first('id', 'nome', 'email', 'perfil', 'ativo');
       if (!antes) throw new ErroDeNegocio(404, 'Usuário não encontrado');
+      if (senha !== undefined) validarSenha(senha, antes.email);
 
       // Evita a matriz ficar sem acesso por engano
       if (antes.id === req.usuario.id && (ativo === false || (perfil && perfil !== 'admin'))) {
@@ -99,7 +98,15 @@ module.exports = {
       if (nome !== undefined) alteracoes.nome = nome;
       if (perfil !== undefined) alteracoes.perfil = perfil;
       if (ativo !== undefined) alteracoes.ativo = Boolean(ativo);
-      if (senha !== undefined) alteracoes.senha_hash = await bcrypt.hash(String(senha), 10);
+      if (senha !== undefined) {
+        alteracoes.senha_hash = await bcrypt.hash(String(senha), 10);
+        alteracoes.senha_alterada_em = trx.fn.now();
+      }
+      // Senha redefinida pela matriz ou desativação: os logins abertos caem
+      // (perfil e filiais são relidos do banco a cada requisição, não precisam derrubar a sessão)
+      if (senha !== undefined || ativo === false) {
+        alteracoes.sessao_versao = trx.raw('sessao_versao + 1');
+      }
 
       const perfilFinal = perfil ?? antes.perfil;
       const filiaisAntes = (await filiaisDoUsuario(trx, antes.id)).map((f) => f.id);
@@ -128,6 +135,17 @@ module.exports = {
     });
 
     return res.json(usuario);
+  },
+
+  // POST /usuarios/:id/encerrar-sessoes — derruba todos os logins abertos (ex.: celular perdido)
+  async encerrarSessoes(req, res) {
+    if (!idValido(req.params.id)) throw new ErroDeNegocio(404, 'Usuário não encontrado');
+    await knex.transaction(async (trx) => {
+      const n = await trx('usuarios').where({ id: req.params.id }).update({ sessao_versao: trx.raw('sessao_versao + 1'), updated_at: trx.fn.now() });
+      if (!n) throw new ErroDeNegocio(404, 'Usuário não encontrado');
+      await auditar(trx, req, { acao: 'encerrar_sessoes', tabela: 'usuarios', registro_id: req.params.id });
+    });
+    return res.status(204).end();
   },
 
   filiaisDoUsuario

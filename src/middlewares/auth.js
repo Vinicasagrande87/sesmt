@@ -12,16 +12,17 @@ const EXPIRA_EM = process.env.JWT_EXPIRES_IN || '8h';
 // Os demais só atuam nas filiais vinculadas a eles (tabela usuario_filiais).
 const PERFIS = ['admin', 'gestor', 'tecnico', 'saude', 'consulta'];
 
+// v = versão da sessão: trocar a senha, desativar ou "encerrar sessões" incrementa e invalida os tokens antigos
 function gerarToken(usuario) {
   return jwt.sign(
-    { perfil: usuario.perfil, nome: usuario.nome },
+    { perfil: usuario.perfil, nome: usuario.nome, v: usuario.sessao_versao || 0 },
     SEGREDO,
     { subject: String(usuario.id), expiresIn: EXPIRA_EM, algorithm: 'HS256' }
   );
 }
 
 // Exige "Authorization: Bearer <token>". Confere no banco a cada requisição:
-// usuário desativado ou com perfil/filiais alterados vale na hora, sem esperar o token expirar.
+// usuário desativado, com a senha trocada ou com perfil/filiais alterados vale na hora, sem esperar o token expirar.
 async function autenticar(req, res, next) {
   const [tipo, token] = (req.headers.authorization || '').split(' ');
   if (tipo !== 'Bearer' || !token) {
@@ -38,16 +39,19 @@ async function autenticar(req, res, next) {
 
   const usuario = await knex('usuarios')
     .where({ id: Number(dados.sub) })
-    .first('id', 'nome', 'perfil', 'ativo');
+    .first('id', 'nome', 'email', 'perfil', 'ativo', 'sessao_versao');
   if (!usuario || !usuario.ativo) {
     return res.status(401).json({ error: 'Usuário inativo ou removido' });
+  }
+  if ((dados.v || 0) !== usuario.sessao_versao) {
+    return res.status(401).json({ error: 'Sessão encerrada, faça login novamente' });
   }
 
   const filiais = usuario.perfil === 'admin'
     ? null // null = todas
     : (await knex('usuario_filiais').where({ usuario_id: usuario.id }).pluck('filial_id')).map(Number);
 
-  req.usuario = { id: usuario.id, nome: usuario.nome, perfil: usuario.perfil, filiais };
+  req.usuario = { id: usuario.id, nome: usuario.nome, email: usuario.email, perfil: usuario.perfil, filiais };
   return next();
 }
 

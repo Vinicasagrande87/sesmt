@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Nova senha — SESMT</title>
+  <style>
+    :root { --fundo: #f4f6f9; --cartao: #fff; --texto: #1d2733; --borda: #ccd3dc; --azul: #1d3557; --erro: #8a1c17; --ok: #1b5e20; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--fundo); color: var(--texto); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+    main { max-width: 420px; margin: 0 auto; padding: 32px 16px; }
+    .cartao { background: var(--cartao); border: 1px solid var(--borda); border-radius: 10px; padding: 20px; }
+    h1 { font-size: 1.25rem; margin: 0 0 4px; }
+    p { margin: 0 0 16px; color: #4a5563; }
+    label { display: block; font-weight: 600; margin: 12px 0 4px; }
+    input { width: 100%; padding: 12px; font-size: 1rem; border: 1px solid var(--borda); border-radius: 8px; }
+    button { width: 100%; margin-top: 18px; padding: 13px; font-size: 1rem; font-weight: 600; color: #fff; background: var(--azul); border: 0; border-radius: 8px; cursor: pointer; }
+    button:disabled { opacity: .6; cursor: default; }
+    #mensagem { margin-top: 14px; font-weight: 600; min-height: 1.4em; }
+    .erro { color: var(--erro); } .ok { color: var(--ok); }
+  </style>
+</head>
+<body>
+<main>
+  <div class="cartao">
+    <h1>Criar nova senha</h1>
+    <p>O link vale por 1 hora e só pode ser usado uma vez.</p>
+    <form id="form" autocomplete="off">
+      <label for="senha">Nova senha (8 caracteres ou mais)</label>
+      <input id="senha" type="password" minlength="8" maxlength="72" required autocomplete="new-password">
+      <label for="confirmacao">Repita a nova senha</label>
+      <input id="confirmacao" type="password" minlength="8" maxlength="72" required autocomplete="new-password">
+      <button id="botao" type="submit">Salvar nova senha</button>
+    </form>
+    <div id="mensagem" role="status"></div>
+  </div>
+</main>
+<script>
+  // O token vem depois do "#", que o navegador não envia ao servidor nem a outros sites
+  const token = new URLSearchParams(location.hash.slice(1)).get('token');
+  history.replaceState(null, '', location.pathname); // tira o token da barra de endereço
+  const msg = document.getElementById('mensagem');
+  const mostrar = (texto, classe) => { msg.textContent = texto; msg.className = classe; };
+  if (!token) {
+    mostrar('Link incompleto. Peça um novo link de redefinição.', 'erro');
+    document.getElementById('botao').disabled = true;
+  }
+  document.getElementById('form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const senha = document.getElementById('senha').value;
+    if (senha !== document.getElementById('confirmacao').value) return mostrar('As duas senhas não são iguais.', 'erro');
+    const botao = document.getElementById('botao');
+    botao.disabled = true;
+    try {
+      const r = await fetch('/auth/redefinir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, nova_senha: senha }) });
+      const corpo = await r.json().catch(() => ({}));
+      if (r.ok) { mostrar(corpo.message || 'Senha criada.', 'ok'); document.getElementById('form').remove(); }
+      else { mostrar(corpo.error || 'Não foi possível salvar.', 'erro'); botao.disabled = false; }
+    } catch {
+      mostrar('Sem conexão com o servidor. Tente de novo.', 'erro');
+      botao.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
