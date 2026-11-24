@@ -164,12 +164,40 @@ async function fechamento(codigo) {
   };
 }
 
+// Permissão de trabalho: está válida agora? (quem está no local confere pelo QR do PDF afixado)
+async function permissaoTrabalho(codigo) {
+  const p = await knex('permissoes_trabalho as p').join('filiais as fi', 'fi.id', 'p.filial_id').leftJoin('predios as pr', 'pr.id', 'p.predio_id')
+    .where('p.codigo_verificacao', codigo).first('p.id', 'p.ano', 'p.sequencial', 'p.tipo', 'p.local_descricao', 'p.inicio', 'p.fim', 'p.status', 'fi.nome as filial', 'pr.nome as predio');
+  if (!p) return null;
+  const { TIPOS, numero } = require('../services/permissoes');
+  const participantes = await knex('pt_participantes as x').join('funcionarios as f', 'f.id', 'x.funcionario_id')
+    .leftJoin('pt_assinaturas as s', 's.participante_id', 'x.id').where('x.pt_id', p.id).orderBy('x.id').select('f.nome', 'x.papel', 's.id as assinatura');
+  const agora = new Date();
+  let situacao = p.status;
+  if (['aguardando_assinaturas', 'liberada'].includes(p.status)) {
+    if (new Date(p.fim) < agora) situacao = 'vencida';
+    else if (new Date(p.inicio) > agora) situacao = 'programada';
+  }
+  return {
+    tipo: 'permissao_trabalho',
+    numero: numero(p),
+    trabalho: TIPOS[p.tipo].nome,
+    filial: p.filial,
+    local: [p.predio, p.local_descricao].filter(Boolean).join(' · '),
+    inicio: p.inicio,
+    fim: p.fim,
+    situacao,
+    pode_trabalhar: situacao === 'liberada',
+    participantes: participantes.map((x) => ({ iniciais: iniciais(x.nome), papel: x.papel, assinou: !!x.assinatura }))
+  };
+}
+
 module.exports = {
   async verificar(req, res) {
     const codigo = String(req.params.codigo || '').toUpperCase();
     if (!/^[A-Z0-9]{8}$/.test(codigo)) return res.status(404).json({ valida: false });
     const achado = (await entrega(codigo)) || (await presenca(codigo)) || (await certificado(codigo)) || (await cienciaOs(codigo)) ||
-      (await inspecaoIncendio(codigo)) || (await relatorio(codigo)) || (await fechamento(codigo));
+      (await inspecaoIncendio(codigo)) || (await relatorio(codigo)) || (await fechamento(codigo)) || (await permissaoTrabalho(codigo));
     if (!achado) return res.status(404).json({ valida: false });
     return res.json({ valida: true, codigo, ...achado });
   }

@@ -208,6 +208,27 @@ A ideia é usar o conhecimento técnico da área para construir uma ferramenta q
   - resumo semanal por e-mail, em que cada responsável recebe as suas ações;
   - linha do tempo e reprogramações na impressão digital do fechamento mensal.
 
+### Permissão de trabalho (NR-35, NR-33, trabalho a quente, NR-10)
+- **Quatro tipos**, cada um com papéis obrigatórios e checklist próprio:
+  - trabalho em altura (NR-35);
+  - espaço confinado (PET, NR-33): executante, vigia e supervisor de entrada;
+  - trabalho a quente: executante e observador de fogo;
+  - eletricidade (NR-10): checklist com a sequência de desenergização do item 10.5.1.
+- **O sistema recusa quem não pode executar:**
+  - treinamento faltando ou vencido até o fim do trabalho (pela NR do tipo, ou pelos cursos que a matriz definir para cada papel);
+  - ASO faltando, vencido, inapto ou apto com restrição;
+  - item do checklist não atendido.
+
+  A resposta lista o problema de cada pessoa, e a tentativa recusada fica na auditoria. A conferência aprovada fica guardada na permissão.
+- **Espaço confinado:**
+  - medição inicial da atmosfera obrigatória (O₂ 19,5–23%, LIE < 10%, H₂S < 8 ppm, CO < 39 ppm);
+  - uma medição fora do limite durante o trabalho **suspende a permissão na hora**.
+- **Validade:** no máximo 12 horas (um turno).
+- **Liberação:** a permissão só é liberada depois que **cada participante assina com crachá + PIN**. A gestão pode registrar a assinatura em papel, com justificativa.
+- **PDF para afixar no local** com QR. A verificação pública diz se a permissão está válida agora (`pode_trabalhar`).
+- **Encerramento** com registro de como a área ficou, ou cancelamento com motivo.
+- **Pendências e integrações:** permissão vencida sem encerramento fica vermelha no semáforo, e há relatório PDF/Excel. Assinaturas e medições só aceitam inclusão e entram no fechamento mensal.
+
 ### Estrutura e controle
 - **Estrutura multi-filial:** matriz → filiais (cada uma com CNPJ próprio, UF, cidade e bairro) → prédios e setores. Funções num catálogo único do grupo.
 - **Permissões por perfil e por filial:**
@@ -291,7 +312,7 @@ npm test
 O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 - sobe um banco temporário;
 - roda as migrations;
-- testa permissões, filtragem por filial, lotação, auditoria, entregas, estoque, treinamentos, ASOs, PGR, ordens de serviço, PPCI, relatórios, integridade (travas do banco, cadeia de hash e fechamento mensal), contas, avisos por e-mail ocorrências (CAT, investigação e indicadores) e plano de ação;
+- testa permissões, filtragem por filial, lotação, auditoria, entregas, estoque, treinamentos, ASOs, PGR, ordens de serviço, PPCI, relatórios, integridade (travas do banco, cadeia de hash e fechamento mensal), contas, avisos por e-mail ocorrências (CAT, investigação e indicadores), plano de ação e permissão de trabalho;
 - apaga tudo no fim.
 
 ## Principais rotas
@@ -323,9 +344,9 @@ O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 | POST | `/entregas/qr` | Entrega por QR + PIN (+ foto), baixa PEPS |
 | POST | `/entregas` | Entrega manual com justificativa (gestão) |
 | POST | `/entregas/:id/estorno` | Estorno de entrega (gestão) |
-| GET | `/verificar/:codigo` | Verificação pública de entrega, presença, certificado, ciência de OS, inspeção de incêndio, relatório ou fechamento |
+| GET | `/verificar/:codigo` | Verificação pública de entrega, presença, certificado, ciência de OS, inspeção de incêndio, relatório, fechamento ou permissão de trabalho |
 | GET | `/painel/conformidade` | Semáforo por filial e módulo (`?filial_id=&data_base=`) |
-| GET | `/relatorios/:tipo` | PDF ou Excel (`?formato=pdf\|xlsx&data_base=&todas=true`): `conformidade`, `treinamentos`, `asos`, `ordens_servico`, `ppci`, `ocorrencias`, `acoes` |
+| GET | `/relatorios/:tipo` | PDF ou Excel (`?formato=pdf\|xlsx&data_base=&todas=true`): `conformidade`, `treinamentos`, `asos`, `ordens_servico`, `ppci`, `ocorrencias`, `acoes`, `permissoes` |
 | GET | `/relatorios-emitidos` | Relatórios emitidos nas filiais do usuário, com código e SHA-256 |
 | GET/POST | `/fechamentos` | Fechamento mensal da filial (POST pela gestão); `?filial_id=` lista também os meses em aberto |
 | GET | `/fechamentos/:id`, `/fechamentos/:id/conferencia` | Situação congelada / conferência do que mudou desde o fechamento |
@@ -386,6 +407,13 @@ O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 | POST | `/acoes/:id/verificar` | Verificação de eficácia por outra pessoa (ineficaz reabre) |
 | POST | `/acoes/:id/prazo`, `/acoes/:id/cancelar` | Reprogramação com motivo / cancelamento (gestão) |
 | GET | `/acoes/pendencias` | Atrasadas e vencendo (`?data_base=`, `?responsavel_id=`) |
+| POST | `/permissoes-trabalho/conferir` | Confere treinamento e ASO de cada participante, sem emitir |
+| GET/POST | `/permissoes-trabalho` | Permissões de trabalho; POST emite (recusa quem não pode) (+ `/:id/pdf`) |
+| POST | `/permissoes-trabalho/:id/assinar` | Ciência do participante por crachá + PIN (libera quando todos assinam) |
+| POST | `/permissoes-trabalho/:id/medicoes` | Medição da atmosfera (fora do limite suspende) |
+| POST | `/permissoes-trabalho/:id/encerrar`, `/:id/cancelar` | Encerramento / cancelamento |
+| GET/PUT | `/permissoes-trabalho/exigencias` | Cursos exigidos por tipo e papel (matriz) |
+| GET | `/permissoes-trabalho/pendencias` | Vencidas sem encerramento e sem todas as assinaturas |
 
 Todas as rotas, exceto `/ping` e `/auth/login`, exigem o cabeçalho `Authorization: Bearer <token>`.
 

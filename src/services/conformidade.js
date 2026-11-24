@@ -7,6 +7,7 @@ const { situacaoOrdensServico } = require('./ordensServico');
 const { situacaoPpci, DIAS_EQUIPAMENTO, DIAS_ALVARA } = require('./ppci');
 const { situacaoOcorrencias } = require('./ocorrencias');
 const { situacaoAcoes } = require('./acoes');
+const { situacaoPermissoes } = require('./permissoes');
 
 const ORDEM_COR = ['cinza', 'verde', 'amarelo', 'vermelho'];
 const pior = (a, b) => (ORDEM_COR.indexOf(a) >= ORDEM_COR.indexOf(b) ? a : b);
@@ -65,6 +66,16 @@ const MODULOS = {
     },
     chave: (i) => `a${i.acao_id}`,
     gravidade: (i) => (i.situacao === 'atrasada' ? 'vermelho' : i.situacao === 'vence_em_breve' ? 'amarelo' : null)
+  },
+  // Permissões de trabalho dos últimos 30 dias: vencida sem encerramento = vermelho; já começou sem todas as assinaturas = amarelo
+  permissoes: {
+    nome: 'Permissões de trabalho',
+    async calcular(db, req, filtros, o) {
+      const itens = await situacaoPermissoes(db, req, filtros, { dataBase: o.dataBase });
+      return { itens, unidades: itens.map((i) => ({ filial_id: i.filial_id, chave: `pt${i.pt_id}` })) };
+    },
+    chave: (i) => `pt${i.pt_id}`,
+    gravidade: (i) => (i.situacao === 'vencida_sem_encerramento' ? 'vermelho' : i.situacao === 'aguardando_assinaturas' ? 'amarelo' : null)
   }
 };
 

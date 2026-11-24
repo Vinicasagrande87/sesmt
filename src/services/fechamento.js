@@ -43,7 +43,9 @@ const FONTES = {
   ocorrencia_testemunhas: { quando: 'created_at', filial: '(select o.filial_id from ocorrencias o where o.id = t.ocorrencia_id)' },
   ocorrencia_anexos: { quando: 'created_at', filial: '(select o.filial_id from ocorrencias o where o.id = t.ocorrencia_id)' },
   acao_registros: { quando: 'created_at', filial: '(select a.filial_id from acoes a where a.id = t.acao_id)' },
-  acao_prazos: { quando: 'created_at', filial: '(select a.filial_id from acoes a where a.id = t.acao_id)' }
+  acao_prazos: { quando: 'created_at', filial: '(select a.filial_id from acoes a where a.id = t.acao_id)' },
+  pt_assinaturas: { quando: 'assinado_em', filial: '(select p.filial_id from pt_participantes x join permissoes_trabalho p on p.id = x.pt_id where x.id = t.participante_id)' },
+  pt_medicoes: { quando: 'medido_em', filial: '(select p.filial_id from permissoes_trabalho p where p.id = t.pt_id)' }
 };
 
 function periodo(competencia) {

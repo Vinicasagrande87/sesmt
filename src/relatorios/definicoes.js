@@ -5,6 +5,7 @@ const { EQUIPAMENTOS, AGENTES, nomeDaMedida } = require('../services/ppci');
 const { dataHoraBR } = require('./formatos');
 const { TIPOS: TIPOS_OCORRENCIA, GRAVIDADES } = require('../services/ocorrencias');
 const { TIPOS_MEDIDA } = require('../services/acoes');
+const { TIPOS: TIPOS_PT } = require('../services/permissoes');
 
 const SITUACOES = {
   // treinamentos / ASO
@@ -23,7 +24,10 @@ const SITUACOES = {
   cat_pendente: 'CAT fora do prazo', cat_a_emitir: 'CAT a emitir (no prazo)', investigacao_atrasada: 'Investigação atrasada',
   em_investigacao: 'Em investigação (no prazo)',
   // plano de ação
-  atrasada: 'Atrasada', vence_em_breve: 'Vence em breve', no_prazo: 'No prazo', concluida: 'Concluída (aguarda verificação)', verificada: 'Verificada (eficaz)'
+  atrasada: 'Atrasada', vence_em_breve: 'Vence em breve', no_prazo: 'No prazo', concluida: 'Concluída (aguarda verificação)', verificada: 'Verificada (eficaz)',
+  // permissões de trabalho
+  vencida_sem_encerramento: 'Vencida sem encerramento', aguardando_assinaturas: 'Começou sem todas as assinaturas', liberada: 'Liberada',
+  programada: 'Programada', encerrada: 'Encerrada'
 };
 const rotulo = (s) => SITUACOES[s] || s;
 const CORES = { verde: 'Verde', amarelo: 'Amarelo', vermelho: 'Vermelho', cinza: 'Sem dados' };
@@ -139,6 +143,20 @@ const RELATORIOS = {
       { titulo: 'Prazo', largura: 50, valor: (i) => i.prazo, tipo: 'data' },
       { titulo: 'Situação', largura: 80, valor: (i) => rotulo(i.situacao) + (i.dias_atraso ? ` (${i.dias_atraso} dias)` : '') },
       { titulo: 'Reprog.', largura: 40, valor: (i) => i.reprogramacoes || '' }
+    ]
+  },
+  permissoes: {
+    titulo: 'Permissões de trabalho (últimos 30 dias)',
+    modulo: MODULOS.permissoes,
+    colunas: [
+      { titulo: 'Filial', largura: 110, valor: (i) => i.filial },
+      { titulo: 'Nº', largura: 50, valor: (i) => i.numero },
+      { titulo: 'Trabalho', largura: 110, valor: (i) => TIPOS_PT[i.tipo].nome },
+      { titulo: 'Local', largura: 170, valor: (i) => i.local },
+      { titulo: 'Início', largura: 75, valor: (i) => dataHoraBR(i.inicio) },
+      { titulo: 'Fim', largura: 75, valor: (i) => dataHoraBR(i.fim) },
+      { titulo: 'Situação', largura: 110, valor: (i) => rotulo(i.situacao) },
+      { titulo: 'Assinaturas', largura: 55, valor: (i) => `${i.assinaturas}/${i.participantes}` }
     ]
   }
 };

@@ -14,6 +14,7 @@ const TransferenciaController = require('./controllers/TransferenciaController')
 const ArquivoController = require('./controllers/ArquivoController');
 const OcorrenciaController = require('./controllers/OcorrenciaController');
 const AcaoController = require('./controllers/AcaoController');
+const PermissaoTrabalhoController = require('./controllers/PermissaoTrabalhoController');
 const TreinamentoController = require('./controllers/TreinamentoController');
 const CertificadoController = require('./controllers/CertificadoController');
 const AuthController = require('./controllers/AuthController');
@@ -255,6 +256,21 @@ routes.post('/acoes/:id/verificar', operacao, AcaoController.verificar);
 routes.post('/acoes/:id/prazo', gestao, AcaoController.reprogramar);
 routes.post('/acoes/:id/cancelar', gestao, AcaoController.cancelar);
 routes.get('/acao-registros/:id/arquivo', AcaoController.arquivo);
+
+// Permissão de trabalho (NR-35, NR-33, trabalho a quente, NR-10): confere treinamento e ASO, assinatura por crachá
+routes.get('/permissoes-trabalho', PermissaoTrabalhoController.index);
+routes.get('/permissoes-trabalho/pendencias', PermissaoTrabalhoController.pendencias);
+routes.get('/permissoes-trabalho/exigencias', PermissaoTrabalhoController.exigencias);
+routes.put('/permissoes-trabalho/exigencias', matriz, PermissaoTrabalhoController.definirExigencias);
+routes.post('/permissoes-trabalho/conferir', operacao, PermissaoTrabalhoController.conferir);
+routes.post('/permissoes-trabalho', operacao, PermissaoTrabalhoController.create);
+routes.get('/permissoes-trabalho/:id', PermissaoTrabalhoController.show);
+routes.get('/permissoes-trabalho/:id/pdf', PermissaoTrabalhoController.pdf);
+routes.post('/permissoes-trabalho/:id/assinar', operacao, PermissaoTrabalhoController.assinar);
+routes.post('/permissoes-trabalho/:id/medicoes', operacao, PermissaoTrabalhoController.medicao);
+routes.post('/permissoes-trabalho/:id/encerrar', operacao, PermissaoTrabalhoController.encerrar);
+routes.post('/permissoes-trabalho/:id/cancelar', operacao, PermissaoTrabalhoController.cancelar);
+routes.post('/pt-participantes/:id/assinatura-manual', gestao, PermissaoTrabalhoController.assinaturaManual);
 
 routes.get('/horas-trabalhadas', OcorrenciaController.horas);
 routes.put('/horas-trabalhadas', gestao, OcorrenciaController.definirHoras);
