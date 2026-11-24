@@ -45,7 +45,11 @@ const FONTES = {
   acao_registros: { quando: 'created_at', filial: '(select a.filial_id from acoes a where a.id = t.acao_id)' },
   acao_prazos: { quando: 'created_at', filial: '(select a.filial_id from acoes a where a.id = t.acao_id)' },
   pt_assinaturas: { quando: 'assinado_em', filial: '(select p.filial_id from pt_participantes x join permissoes_trabalho p on p.id = x.pt_id where x.id = t.participante_id)' },
-  pt_medicoes: { quando: 'medido_em', filial: '(select p.filial_id from permissoes_trabalho p where p.id = t.pt_id)' }
+  pt_medicoes: { quando: 'medido_em', filial: '(select p.filial_id from permissoes_trabalho p where p.id = t.pt_id)' },
+  // Documento de terceirizada vale para as filiais onde a empresa já tinha contrato quando ele foi lançado
+  // (contrato aberto depois não muda o fechamento de um mês passado)
+  terceiro_documentos: { quando: 'created_at', filiais: 'select c.filial_id from terceiro_contratos c where c.empresa_id = t.empresa_id and c.created_at <= t.created_at' },
+  terceiro_documento_anulacoes: { quando: 'created_at', filiais: 'select c.filial_id from terceiro_documentos d join terceiro_contratos c on c.empresa_id = d.empresa_id where d.id = t.documento_id and c.created_at <= t.created_at' }
 };
 
 function periodo(competencia) {
@@ -59,7 +63,7 @@ async function impressoesDoMes(db, filialId, competencia) {
   const { de, ate } = periodo(competencia);
   const resultado = {};
   for (const [tabela, f] of Object.entries(FONTES)) {
-    const linhas = await db(`${tabela} as t`).whereRaw(`${f.filial} = ?`, [filialId])
+    const linhas = await db(`${tabela} as t`).whereRaw(f.filiais ? `? in (${f.filiais})` : `${f.filial} = ?`, [filialId])
       .where(`t.${f.quando}`, '>=', de).where(`t.${f.quando}`, '<', ate).orderBy('t.id').select('t.*');
     resultado[tabela] = linhas.map((l) => [Number(l.id), hashCanonico(l)]);
   }

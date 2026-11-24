@@ -8,6 +8,7 @@ const { situacaoPpci, DIAS_EQUIPAMENTO, DIAS_ALVARA } = require('./ppci');
 const { situacaoOcorrencias } = require('./ocorrencias');
 const { situacaoAcoes } = require('./acoes');
 const { situacaoPermissoes } = require('./permissoes');
+const { situacaoTerceiros } = require('./terceiros');
 
 const ORDEM_COR = ['cinza', 'verde', 'amarelo', 'vermelho'];
 const pior = (a, b) => (ORDEM_COR.indexOf(a) >= ORDEM_COR.indexOf(b) ? a : b);
@@ -76,6 +77,16 @@ const MODULOS = {
     },
     chave: (i) => `pt${i.pt_id}`,
     gravidade: (i) => (i.situacao === 'vencida_sem_encerramento' ? 'vermelho' : i.situacao === 'aguardando_assinaturas' ? 'amarelo' : null)
+  },
+  // Terceirizadas: cada exigência de cada contrato ativo (PGR/PCMSO da empresa; ASO, integração e treinamentos de quem está alocado)
+  terceiros: {
+    nome: 'Terceirizadas',
+    async calcular(db, req, filtros, o) {
+      const itens = await situacaoTerceiros(db, req, filtros, { dias: o.dias, dataBase: o.dataBase });
+      return { itens, unidades: itens.map((i) => ({ filial_id: i.filial_id, chave: `${i.contrato_id}:${i.trabalhador_id || 'e'}:${i.exigencia}` })) };
+    },
+    chave: (i) => `${i.contrato_id}:${i.trabalhador_id || 'e'}:${i.exigencia}`,
+    gravidade: (i) => (['faltando', 'vencido', 'inapto'].includes(i.situacao) ? 'vermelho' : i.situacao === 'vencendo' || i.com_restricao ? 'amarelo' : null)
   }
 };
 

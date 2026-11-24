@@ -158,6 +158,19 @@ const RELATORIOS = {
       { titulo: 'Situação', largura: 110, valor: (i) => rotulo(i.situacao) },
       { titulo: 'Assinaturas', largura: 55, valor: (i) => `${i.assinaturas}/${i.participantes}` }
     ]
+  },
+  terceiros: {
+    titulo: 'Terceirizadas — documentos de SST',
+    modulo: MODULOS.terceiros,
+    colunas: [
+      { titulo: 'Filial', largura: 100, valor: (i) => i.filial },
+      { titulo: 'Empresa', largura: 130, valor: (i) => i.empresa },
+      { titulo: 'Contrato', largura: 140, valor: (i) => i.contrato },
+      { titulo: 'Trabalhador', largura: 120, valor: (i) => i.trabalhador || '(empresa)' },
+      { titulo: 'Exigência', largura: 120, valor: (i) => i.exigencia },
+      { titulo: 'Situação', largura: 85, valor: (i) => rotulo(i.situacao) + (i.com_restricao ? ' (com restrição)' : '') },
+      { titulo: 'Vencimento', largura: 60, valor: (i) => i.vencimento, tipo: 'data' }
+    ]
   }
 };
 

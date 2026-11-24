@@ -50,8 +50,16 @@ async function lerParticipantes(db, req, tipo, lista) {
   const lidos = [];
   for (const [i, p] of lista.entries()) {
     if (!p || !config.papeis[p.papel]) throw new ErroDeNegocio(400, `Participante ${i + 1}: papel deve ser ${Object.keys(config.papeis).join(', ')}`);
+    if (p.terceiro_trabalhador_id !== undefined && p.terceiro_trabalhador_id !== null) {
+      // Terceirizado: a conferência exige contrato ativo na filial com ele alocado
+      const t = idValido(p.terceiro_trabalhador_id) && await db('terceiro_trabalhadores').where({ id: Number(p.terceiro_trabalhador_id) }).first();
+      if (!t) throw new ErroDeNegocio(400, `Participante ${i + 1}: terceirizado não encontrado`);
+      if (lidos.some((x) => x.terceiro && x.terceiro.id === t.id)) throw new ErroDeNegocio(400, `${t.nome} aparece duas vezes: cada pessoa tem um papel só`);
+      lidos.push({ terceiro: t, papel: p.papel });
+      continue;
+    }
     const f = await buscarNoEscopo(req, p.funcionario_id, db).catch(() => { throw new ErroDeNegocio(400, `Participante ${i + 1}: funcionário não encontrado`); });
-    if (lidos.some((x) => x.funcionario.id === f.id)) throw new ErroDeNegocio(400, `${f.nome} aparece duas vezes: cada pessoa tem um papel só`);
+    if (lidos.some((x) => x.funcionario && x.funcionario.id === f.id)) throw new ErroDeNegocio(400, `${f.nome} aparece duas vezes: cada pessoa tem um papel só`);
     lidos.push({ funcionario: f, papel: p.papel });
   }
   for (const [papel, minimo] of Object.entries(config.papeis)) {
@@ -85,9 +93,11 @@ async function ptNoEscopo(db, req, id, { travar = false } = {}) {
 }
 
 async function carregar(db, p) {
-  const participantes = await db('pt_participantes as x').join('funcionarios as f', 'f.id', 'x.funcionario_id')
+  const participantes = await db('pt_participantes as x').leftJoin('funcionarios as f', 'f.id', 'x.funcionario_id')
+    .leftJoin('terceiro_trabalhadores as t', 't.id', 'x.terceiro_trabalhador_id').leftJoin('empresas_terceiras as e', 'e.id', 't.empresa_id')
     .leftJoin('pt_assinaturas as s', 's.participante_id', 'x.id').where('x.pt_id', p.id).orderBy('x.id')
-    .select('x.id', 'x.funcionario_id', 'f.nome', 'f.matricula', 'x.papel', 'x.conferencia', 's.assinado_em', 's.metodo as metodo_assinatura', 's.observacao as observacao_assinatura');
+    .select('x.id', 'x.funcionario_id', 'x.terceiro_trabalhador_id', db.raw('coalesce(f.nome, t.nome) as nome'), 'f.matricula', 'e.razao_social as empresa',
+      'x.papel', 'x.conferencia', 's.assinado_em', 's.metodo as metodo_assinatura', 's.observacao as observacao_assinatura');
   const medicoes = await db('pt_medicoes').where({ pt_id: p.id }).orderBy('medido_em');
   const filial = await db('filiais').where({ id: p.filial_id }).first('nome', 'razao_social', 'cnpj', 'cidade', 'uf');
   const emitente = await db('usuarios').where({ id: p.emitida_por }).first('nome');
@@ -125,8 +135,10 @@ module.exports = {
     const b = req.body || {};
     if (!P.TIPOS[b.tipo]) throw new ErroDeNegocio(400, `tipo deve ser: ${Object.keys(P.TIPOS).join(', ')}`);
     const dataFim = b.fim ? dataLocal(lerInstante(b.fim, 'fim')) : hoje();
+    if (b.filial_id !== undefined && (!idValido(b.filial_id) || !podeAcessarFilial(req, b.filial_id))) throw new ErroDeNegocio(404, 'Filial não encontrada');
     const participantes = await lerParticipantes(knex, req, b.tipo, b.participantes);
-    const conferidos = await P.conferirParticipantes(knex, b.tipo, participantes, dataFim);
+    if (participantes.some((p) => p.terceiro) && !b.filial_id) throw new ErroDeNegocio(400, 'Com terceirizado, informe a filial_id (o contrato é por filial)');
+    const conferidos = await P.conferirParticipantes(knex, b.tipo, participantes, dataFim, { filialId: Number(b.filial_id) });
     return res.json({ ok: conferidos.every((c) => c.ok), participantes: conferidos.map(({ conferencia, ...c }) => ({ ...c, treinamentos: conferencia.treinamentos, aso: conferencia.aso })) });
   },
 
@@ -152,14 +164,15 @@ module.exports = {
       if (!medicao.dentro) throw new ErroDeNegocio(409, `Atmosfera fora dos limites: ${medicao.fora.join('; ')}. Não é permitido entrar.`, { fora: medicao.fora });
     }
     const participantes = await lerParticipantes(knex, req, b.tipo, b.participantes);
-    const conferidos = await P.conferirParticipantes(knex, b.tipo, participantes, dataLocal(fim));
+    const conferidos = await P.conferirParticipantes(knex, b.tipo, participantes, dataLocal(fim), { filialId: Number(b.filial_id) });
     const recusados = conferidos.filter((c) => !c.ok);
     if (recusados.length) {
       // A tentativa fica registrada: mostra quem tentou liberar trabalhador sem condição
       await auditar(knex, req, { acao: 'pt_recusada', tabela: 'permissoes_trabalho', filial_id: Number(b.filial_id),
-        depois: { tipo: b.tipo, local, recusados: recusados.map((r) => ({ funcionario_id: r.funcionario_id, problemas: r.problemas })) } });
+        depois: { tipo: b.tipo, local, recusados: recusados.map((r) => ({ funcionario_id: r.funcionario_id, terceiro_trabalhador_id: r.terceiro_trabalhador_id, problemas: r.problemas })) } });
       throw new ErroDeNegocio(409, 'Há participantes que não podem executar este trabalho', {
-        participantes: recusados.map((r) => ({ funcionario_id: r.funcionario_id, funcionario: r.funcionario, papel: r.papel, problemas: r.problemas }))
+        participantes: recusados.map((r) => ({ funcionario_id: r.funcionario_id, terceiro_trabalhador_id: r.terceiro_trabalhador_id, funcionario: r.funcionario,
+          empresa: r.empresa, papel: r.papel, problemas: r.problemas }))
       });
     }
 
@@ -177,7 +190,8 @@ module.exports = {
         local_descricao: local, servico, inicio, fim, checklist: JSON.stringify(checklist), medidas_adicionais: medidas, epis: texto(b.epis, 2000),
         emitida_por: req.usuario.id, codigo_verificacao: gerarCodigo()
       }).returning('*');
-      await trx('pt_participantes').insert(conferidos.map((c) => ({ pt_id: p.id, funcionario_id: c.funcionario_id, papel: c.papel, conferencia: JSON.stringify(c.conferencia) })));
+      await trx('pt_participantes').insert(conferidos.map((c) => ({ pt_id: p.id, funcionario_id: c.funcionario_id || null,
+        terceiro_trabalhador_id: c.terceiro_trabalhador_id || null, papel: c.papel, conferencia: JSON.stringify(c.conferencia) })));
       if (medicao) {
         await trx('pt_medicoes').insert({ pt_id: p.id, ...medicao.valores, equipamento: texto(b.medicao_inicial.equipamento, 100), dentro_limites: true,
           observacao: 'Medição inicial', usuario_id: req.usuario.id });
@@ -226,12 +240,14 @@ module.exports = {
     return res.status(201).json({ assinou: participante.nome, liberada: liberou || completo.status === 'liberada', permissao: completo });
   },
 
-  // POST /pt-participantes/:id/assinatura-manual { observacao } — gestão (permissão em papel assinada)
+  // POST /pt-participantes/:id/assinatura-manual { observacao } — funcionário: gestão (permissão em papel);
+  // terceirizado (não tem crachá do grupo): a equipe de SST registra a ciência dada no local
   async assinaturaManual(req, res) {
     const observacao = texto(req.body && req.body.observacao, 2000);
     if (!observacao || observacao.length < 10) throw new ErroDeNegocio(400, 'Assinatura sem crachá exige justificativa (pelo menos 10 caracteres)');
     const x = idValido(req.params.id) && await knex('pt_participantes').where({ id: Number(req.params.id) }).first();
     if (!x) throw new ErroDeNegocio(404, 'Participante não encontrado');
+    if (x.funcionario_id && !['admin', 'gestor'].includes(req.usuario.perfil)) throw new ErroDeNegocio(403, 'Funcionário assina com o crachá; sem crachá, só a gestão registra');
     const ptId = (await ptNoEscopo(knex, req, x.pt_id).catch(() => { throw new ErroDeNegocio(404, 'Participante não encontrado'); })).id;
     await knex.transaction(async (trx) => {
       const p = await ptNoEscopo(trx, req, ptId, { travar: true });

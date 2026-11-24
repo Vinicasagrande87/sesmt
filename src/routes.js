@@ -15,6 +15,7 @@ const ArquivoController = require('./controllers/ArquivoController');
 const OcorrenciaController = require('./controllers/OcorrenciaController');
 const AcaoController = require('./controllers/AcaoController');
 const PermissaoTrabalhoController = require('./controllers/PermissaoTrabalhoController');
+const TerceiroController = require('./controllers/TerceiroController');
 const TreinamentoController = require('./controllers/TreinamentoController');
 const CertificadoController = require('./controllers/CertificadoController');
 const AuthController = require('./controllers/AuthController');
@@ -270,7 +271,27 @@ routes.post('/permissoes-trabalho/:id/assinar', operacao, PermissaoTrabalhoContr
 routes.post('/permissoes-trabalho/:id/medicoes', operacao, PermissaoTrabalhoController.medicao);
 routes.post('/permissoes-trabalho/:id/encerrar', operacao, PermissaoTrabalhoController.encerrar);
 routes.post('/permissoes-trabalho/:id/cancelar', operacao, PermissaoTrabalhoController.cancelar);
-routes.post('/pt-participantes/:id/assinatura-manual', gestao, PermissaoTrabalhoController.assinaturaManual);
+routes.post('/pt-participantes/:id/assinatura-manual', operacao, PermissaoTrabalhoController.assinaturaManual); // funcionário: só gestão (no controller)
+
+// Terceirizadas (NR-1, 1.5.8): empresas, contratos por filial, trabalhadores, documentos e consulta de acesso
+routes.get('/terceiros/empresas', TerceiroController.empresas);
+routes.post('/terceiros/empresas', operacao, TerceiroController.criarEmpresa);
+routes.get('/terceiros/empresas/:id', TerceiroController.empresa);
+routes.put('/terceiros/empresas/:id', operacao, TerceiroController.alterarEmpresa);
+routes.get('/terceiros/contratos', TerceiroController.contratos);
+routes.post('/terceiros/contratos', operacao, TerceiroController.criarContrato);
+routes.put('/terceiros/contratos/:id', operacao, TerceiroController.alterarContrato);
+routes.post('/terceiros/contratos/:id/encerrar', gestao, TerceiroController.encerrarContrato);
+routes.post('/terceiros/contratos/:id/alocacoes', operacao, TerceiroController.alocar);
+routes.post('/terceiro-alocacoes/:id/encerrar', operacao, TerceiroController.desalocar);
+routes.get('/terceiros/trabalhadores', TerceiroController.trabalhadores);
+routes.post('/terceiros/trabalhadores', operacao, TerceiroController.criarTrabalhador);
+routes.put('/terceiros/trabalhadores/:id', operacao, TerceiroController.alterarTrabalhador);
+routes.post('/terceiros/documentos', cadastroPessoal, TerceiroController.registrarDocumento);
+routes.post('/terceiro-documentos/:id/anular', gestao, TerceiroController.anularDocumento);
+routes.get('/terceiro-documentos/:id/arquivo', TerceiroController.arquivo);
+routes.get('/terceiros/pendencias', TerceiroController.pendencias);
+routes.get('/terceiros/acesso', TerceiroController.acesso);
 
 routes.get('/horas-trabalhadas', OcorrenciaController.horas);
 routes.put('/horas-trabalhadas', gestao, OcorrenciaController.definirHoras);

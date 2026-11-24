@@ -37,9 +37,13 @@ function gerarPermissaoPdf({ permissao: p, qr, url, emitidoPor }) {
     colunas: [{ titulo: 'Nome', largura: 130 }, { titulo: 'Papel', largura: 80 }, { titulo: 'Treinamento (validade)', largura: 135 },
       { titulo: 'ASO (validade)', largura: 70 }, { titulo: 'Ciência', largura: 100 }],
     linhas: p.participantes.map((x) => [
-      `${x.nome} (${x.matricula})`, x.nome_papel,
-      x.conferencia.treinamentos.map((t) => `${t.treinamento}${t.vencimento ? ` (${dataBR(t.vencimento)})` : ''}`).join('\n') || '—',
-      x.conferencia.aso ? (x.conferencia.aso.vencimento ? dataBR(x.conferencia.aso.vencimento) : 'apto') : '—',
+      x.terceiro_trabalhador_id ? `${x.nome} (terceirizado — ${x.empresa})` : `${x.nome} (${x.matricula})`, x.nome_papel,
+      x.terceiro_trabalhador_id
+        ? x.conferencia.documentos.filter((d) => d.exigencia !== 'ASO').map((d) => `${d.exigencia}${d.vencimento ? ` (${dataBR(d.vencimento)})` : ''}`).join('\n')
+        : x.conferencia.treinamentos.map((t) => `${t.treinamento}${t.vencimento ? ` (${dataBR(t.vencimento)})` : ''}`).join('\n') || '—',
+      x.terceiro_trabalhador_id
+        ? ((x.conferencia.documentos.find((d) => d.exigencia === 'ASO') || {}).vencimento ? dataBR(x.conferencia.documentos.find((d) => d.exigencia === 'ASO').vencimento) : '—')
+        : x.conferencia.aso ? (x.conferencia.aso.vencimento ? dataBR(x.conferencia.aso.vencimento) : 'apto') : '—',
       x.assinado_em ? `${dataHoraBR(x.assinado_em)}${x.metodo_assinatura === 'qr_pin' ? ' (crachá + PIN)' : ' (manual)'}` : 'PENDENTE'
     ])
   });

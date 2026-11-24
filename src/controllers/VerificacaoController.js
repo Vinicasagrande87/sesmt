@@ -170,8 +170,10 @@ async function permissaoTrabalho(codigo) {
     .where('p.codigo_verificacao', codigo).first('p.id', 'p.ano', 'p.sequencial', 'p.tipo', 'p.local_descricao', 'p.inicio', 'p.fim', 'p.status', 'fi.nome as filial', 'pr.nome as predio');
   if (!p) return null;
   const { TIPOS, numero } = require('../services/permissoes');
-  const participantes = await knex('pt_participantes as x').join('funcionarios as f', 'f.id', 'x.funcionario_id')
-    .leftJoin('pt_assinaturas as s', 's.participante_id', 'x.id').where('x.pt_id', p.id).orderBy('x.id').select('f.nome', 'x.papel', 's.id as assinatura');
+  const participantes = await knex('pt_participantes as x').leftJoin('funcionarios as f', 'f.id', 'x.funcionario_id')
+    .leftJoin('terceiro_trabalhadores as t', 't.id', 'x.terceiro_trabalhador_id')
+    .leftJoin('pt_assinaturas as s', 's.participante_id', 'x.id').where('x.pt_id', p.id).orderBy('x.id')
+    .select(knex.raw('coalesce(f.nome, t.nome) as nome'), 'x.papel', 's.id as assinatura');
   const agora = new Date();
   let situacao = p.status;
   if (['aguardando_assinaturas', 'liberada'].includes(p.status)) {

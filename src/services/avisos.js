@@ -12,6 +12,7 @@ const { situacaoPpci, EQUIPAMENTOS } = require('./ppci');
 const { enviarEmail, emailAtivo } = require('./email');
 const { situacaoOcorrencias, TIPOS: TIPOS_OCORRENCIA } = require('./ocorrencias');
 const { situacaoAcoes } = require('./acoes');
+const { situacaoTerceiros } = require('./terceiros');
 
 const COMO_MATRIZ = { usuario: { perfil: 'admin', filiais: null } }; // os avisos olham todas as filiais
 const MANUTENCOES = { recarga: 'Recarga', teste_hidrostatico: 'Teste hidrostático', manutencao: 'Manutenção' };
@@ -84,6 +85,13 @@ async function montarAvisos(db, { dataHoje = hoje() } = {}) {
       add({ modulo: 'Investigação de ocorrência', filial_id: o.filial_id, filial: o.filial, data: o.prazo_investigacao,
         descricao: `Ocorrência ${o.numero} (${TIPOS_OCORRENCIA[o.tipo]}) — concluir a investigação` });
     }
+  }
+
+  // Terceirizadas: documentos da empresa e dos trabalhadores alocados
+  for (const t of await situacaoTerceiros(db, COMO_MATRIZ, {}, { dias })) {
+    if (!['vencido', 'vencendo'].includes(t.situacao)) continue;
+    add({ modulo: 'Terceirizada', filial_id: t.filial_id, filial: t.filial, data: t.vencimento,
+      descricao: `${t.empresa}${t.trabalhador ? ` — ${t.trabalhador}` : ''} — ${t.exigencia}` });
   }
 
   // Plano de ação: abertas com prazo até a data-limite (o responsável também recebe as suas)

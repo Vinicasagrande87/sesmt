@@ -229,6 +229,20 @@ A ideia é usar o conhecimento técnico da área para construir uma ferramenta q
 - **Encerramento** com registro de como a área ficou, ou cancelamento com motivo.
 - **Pendências e integrações:** permissão vencida sem encerramento fica vermelha no semáforo, e há relatório PDF/Excel. Assinaturas e medições só aceitam inclusão e entram no fechamento mensal.
 
+### Empresas terceirizadas (NR-1, 1.5.8)
+- **Empresa contratada única no grupo**, pelo CNPJ: o sistema avisa se ela já existe. **Contratos por filial**, com objeto, vigência, fiscal e **treinamentos exigidos** de quem trabalha naquele contrato.
+- **Trabalhadores da contratada** (CPF único, mascarado para o perfil consulta), alocados nos contratos.
+- **Documentos com validade, só por inclusão** (corrige-se anulando):
+  - da empresa: PGR e PCMSO;
+  - do trabalhador: ASO (só o resultado e a validade, com o arquivo só para saúde/admin), integração de segurança (12 meses por padrão) e treinamentos, pelo catálogo ou pela NR.
+- **Consulta de acesso pelo CPF** (portaria): "liberado / não liberado" na filial, com os motivos. Cada consulta fica registrada.
+- **Permissão de trabalho aceita terceirizado**, com a mesma conferência:
+  - contrato ativo na filial com ele alocado;
+  - PGR e PCMSO da empresa;
+  - ASO, integração e o treinamento da NR do tipo de permissão;
+  - a ciência é registrada pela equipe de SST no local.
+- **Integrações:** pendências com "como estava em", módulo no semáforo, relatório, avisos semanais e fechamento mensal.
+
 ### Estrutura e controle
 - **Estrutura multi-filial:** matriz → filiais (cada uma com CNPJ próprio, UF, cidade e bairro) → prédios e setores. Funções num catálogo único do grupo.
 - **Permissões por perfil e por filial:**
@@ -312,7 +326,7 @@ npm test
 O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 - sobe um banco temporário;
 - roda as migrations;
-- testa permissões, filtragem por filial, lotação, auditoria, entregas, estoque, treinamentos, ASOs, PGR, ordens de serviço, PPCI, relatórios, integridade (travas do banco, cadeia de hash e fechamento mensal), contas, avisos por e-mail ocorrências (CAT, investigação e indicadores), plano de ação e permissão de trabalho;
+- testa permissões, filtragem por filial, lotação, auditoria, entregas, estoque, treinamentos, ASOs, PGR, ordens de serviço, PPCI, relatórios, integridade (travas do banco, cadeia de hash e fechamento mensal), contas, avisos por e-mail ocorrências (CAT, investigação e indicadores), plano de ação, permissão de trabalho e terceirizadas;
 - apaga tudo no fim.
 
 ## Principais rotas
@@ -346,7 +360,7 @@ O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 | POST | `/entregas/:id/estorno` | Estorno de entrega (gestão) |
 | GET | `/verificar/:codigo` | Verificação pública de entrega, presença, certificado, ciência de OS, inspeção de incêndio, relatório, fechamento ou permissão de trabalho |
 | GET | `/painel/conformidade` | Semáforo por filial e módulo (`?filial_id=&data_base=`) |
-| GET | `/relatorios/:tipo` | PDF ou Excel (`?formato=pdf\|xlsx&data_base=&todas=true`): `conformidade`, `treinamentos`, `asos`, `ordens_servico`, `ppci`, `ocorrencias`, `acoes`, `permissoes` |
+| GET | `/relatorios/:tipo` | PDF ou Excel (`?formato=pdf\|xlsx&data_base=&todas=true`): `conformidade`, `treinamentos`, `asos`, `ordens_servico`, `ppci`, `ocorrencias`, `acoes`, `permissoes`, `terceiros` |
 | GET | `/relatorios-emitidos` | Relatórios emitidos nas filiais do usuário, com código e SHA-256 |
 | GET/POST | `/fechamentos` | Fechamento mensal da filial (POST pela gestão); `?filial_id=` lista também os meses em aberto |
 | GET | `/fechamentos/:id`, `/fechamentos/:id/conferencia` | Situação congelada / conferência do que mudou desde o fechamento |
@@ -414,6 +428,12 @@ O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 | POST | `/permissoes-trabalho/:id/encerrar`, `/:id/cancelar` | Encerramento / cancelamento |
 | GET/PUT | `/permissoes-trabalho/exigencias` | Cursos exigidos por tipo e papel (matriz) |
 | GET | `/permissoes-trabalho/pendencias` | Vencidas sem encerramento e sem todas as assinaturas |
+| GET/POST/PUT | `/terceiros/empresas` | Empresas contratadas (`?cnpj=` procura no grupo) |
+| GET/POST/PUT | `/terceiros/contratos` | Contratos por filial com treinamentos exigidos (+ `/:id/encerrar`, `/:id/alocacoes`) |
+| GET/POST/PUT | `/terceiros/trabalhadores` | Trabalhadores das contratadas |
+| POST | `/terceiros/documentos`, `/terceiro-documentos/:id/anular` | PGR/PCMSO da empresa; ASO, integração e treinamentos do trabalhador |
+| GET | `/terceiros/pendencias` | Documentos faltando, vencidos ou vencendo por contrato |
+| GET | `/terceiros/acesso` | Portaria: o CPF pode trabalhar hoje nesta filial? |
 
 Todas as rotas, exceto `/ping` e `/auth/login`, exigem o cabeçalho `Authorization: Bearer <token>`.
 

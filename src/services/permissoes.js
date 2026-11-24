@@ -88,9 +88,35 @@ function avaliarMedicao(m, { exigir = true } = {}) {
   return { valores, dentro: !fora.length, fora };
 }
 
+// Treinamentos que a permissão exige de um papel (para terceirizado): os da matriz, ou a NR do tipo
+async function requisitosDoPapel(db, tipo, papel) {
+  const config = TIPOS[tipo];
+  const configurados = await db('pt_exigencias as e').join('treinamentos as t', 't.id', 'e.treinamento_id').where({ 'e.tipo': tipo, 'e.papel': papel })
+    .select('t.id', 't.nome_treinamento', 't.nr_referencia');
+  if (configurados.length) return configurados.map((t) => ({ treinamento_id: t.id, nr: t.nr_referencia, nome: t.nome_treinamento }));
+  if (config.nr && papel !== 'observador') return [{ nr: config.nr, nome: `treinamento ${config.nr}` }];
+  return [];
+}
+
 // Confere cada participante para o tipo de permissão, válido até a data do fim do trabalho.
-// participantes: [{ funcionario: {id, nome, matricula, status}, papel }]
-async function conferirParticipantes(db, tipo, participantes, dataFim) {
+// participantes: [{ funcionario: {id, nome, matricula, status}, papel }] ou [{ terceiro: {...}, papel }]
+async function conferirParticipantes(db, tipo, participantes, dataFim, { filialId } = {}) {
+  const terceiros = participantes.filter((p) => p.terceiro);
+  const proprios = participantes.filter((p) => p.funcionario);
+  const resultado = await conferirFuncionarios(db, tipo, proprios, dataFim);
+  for (const p of terceiros) {
+    const { conferirTerceiro } = require('./terceiros');
+    const c = await conferirTerceiro(db, p.terceiro, filialId, dataFim, await requisitosDoPapel(db, tipo, p.papel));
+    resultado.push({
+      terceiro_trabalhador_id: p.terceiro.id, funcionario: p.terceiro.nome, matricula: null, empresa: c.conferencia.empresa, papel: p.papel,
+      ok: c.ok, problemas: c.problemas, conferencia: { em: new Date().toISOString(), valido_ate: dataFim, terceirizado: true, ...c.conferencia }
+    });
+  }
+  return resultado;
+}
+
+async function conferirFuncionarios(db, tipo, participantes, dataFim) {
+  if (!participantes.length) return [];
   const config = TIPOS[tipo];
   const ids = participantes.map((p) => p.funcionario.id);
   const exigencias = await db('pt_exigencias as e').join('treinamentos as t', 't.id', 'e.treinamento_id').where('e.tipo', tipo)
