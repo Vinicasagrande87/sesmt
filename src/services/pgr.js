@@ -32,7 +32,8 @@ function nivelDoRisco(probabilidade, efeito) {
 }
 
 const texto = (v) => (v === undefined || v === null || String(v).trim() === '' ? null : String(v).trim());
-const chave = (v) => String(v || '').trim().toLocaleLowerCase('pt-BR');
+// Comparação de nomes sem diferenciar maiúsculas, acentos e espaços repetidos ("ESTAGIARIO" = "Estagiário")
+const chave = (v) => String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
 
 // Normaliza e valida um grupo de exposição. Setor e funções podem vir por id ou por nome
 // (facilita importar a planilha montada a partir do PDF).

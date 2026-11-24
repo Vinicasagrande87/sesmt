@@ -86,7 +86,13 @@ A ideia é usar o conhecimento técnico da área para construir uma ferramenta q
   - inventário de riscos: só as linhas que existem, sem o checklist vazio;
   - medidas de controle, EPIs por parte do corpo e treinamentos propostos.
 - **Classificação de risco pela matriz AIHA:** probabilidade × efeito gera o nível (trivial a muito alto) automaticamente.
-- **Importação em lote:** setor e funções podem vir pelo nome, o que facilita carregar a planilha montada a partir do PDF. Vale tudo ou nada: um erro em qualquer grupo cancela o lote inteiro.
+- **Importação em lote:** setor e funções podem vir pelo nome, sem diferenciar maiúsculas e acentos ("ESTAGIARIO" = "Estagiário"). Vale tudo ou nada: um erro em qualquer grupo cancela o lote inteiro.
+- **Planilha de importação (Excel):** abas Grupos, Riscos, EPIs e Treinamentos, ligadas pelo Nº do grupo, com listas de valores válidos. A leitura aponta todos os problemas de uma vez (linha e aba), inclusive a mesma função repetida no mesmo setor.
+  ```bash
+  npm run pgr:planilha -- modelo pgr-modelo.xlsx            # planilha em branco para preencher
+  npm run pgr:planilha -- converter pgr.xlsx grupos.json    # valida e gera o JSON da API
+  SESMT_SENHA=... npm run pgr:planilha -- importar pgr.xlsx --url http://localhost:3000 --pgr 12 --email tecnico@empresa.com
+  ```
 - **Publicação congela o PGR** e gera uma **ordem de serviço por grupo**:
   - o conteúdo da OS é "fotografado" (JSON + SHA-256);
   - a ciência do funcionário fica ligada exatamente ao texto que ele viu.

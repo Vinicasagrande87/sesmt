@@ -30,7 +30,7 @@ async function subirPostgres() {
       port: porta,
       user: 'postgres',
       password: 'postgres',
-      persistent: false,
+      persistent: true, // a pasta é apagada por encerrar(), com novas tentativas (no Windows o stop() falhava com EBUSY)
       onLog: () => {},
       onError: () => {}
     });
@@ -42,7 +42,7 @@ async function subirPostgres() {
     } catch (erro) {
       ultimoErro = erro;
       await pg.stop().catch(() => {});
-      fs.rmSync(pasta, { recursive: true, force: true });
+      try { fs.rmSync(pasta, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }); } catch { /* pasta temporária */ }
     }
   }
   throw ultimoErro;
