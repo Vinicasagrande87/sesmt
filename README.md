@@ -139,6 +139,23 @@ A ideia é usar o conhecimento técnico da área para construir uma ferramenta q
   - cada emissão fica registrada com o SHA-256 do conteúdo e do arquivo;
   - a verificação pública mostra só o resumo (contagens), nunca a lista de pessoas.
 
+### Integridade: cadeia de hash e fechamento mensal
+- **Tabelas de prova só aceitam inclusão:** presenças, ciências, ASOs, inspeções, manutenções, estornos, anulações, relatórios emitidos e fechamentos.
+  - O próprio banco recusa `UPDATE`, `DELETE` e `TRUNCATE`.
+  - A correção continua sendo por anulação ou estorno, que também é inclusão.
+- **Auditoria encadeada por hash:** cada linha recebe uma sequência e o SHA-256 da linha anterior junto com o seu próprio conteúdo.
+  - A selagem roda logo depois de cada requisição e, por garantia, a cada minuto.
+  - A matriz confere a cadeia inteira em `GET /auditoria/integridade`.
+  - Uma linha alterada, apagada ou inserida no meio quebra a cadeia, e a conferência aponta onde.
+- **Fechamento mensal por filial** (pela gestão, só de mês já encerrado). Ele congela:
+  - a situação de cada módulo no último dia do mês, com o semáforo e a lista completa;
+  - a impressão digital (SHA-256) de cada registro de prova lançado no mês;
+  - a âncora na cadeia da auditoria.
+
+  Os fechamentos da filial são encadeados entre si e têm código de verificação público.
+- **Conferência do fechamento:** recalcula tudo e aponta cada registro alterado, apagado ou lançado depois com data retroativa.
+- **Recomendação para produção:** o usuário do banco usado pela aplicação não deve ser dono das tabelas nem superusuário. Assim ele não consegue desligar as travas.
+
 ### Estrutura e controle
 - **Estrutura multi-filial:** matriz → filiais (cada uma com CNPJ próprio, UF, cidade e bairro) → prédios e setores. Funções num catálogo único do grupo.
 - **Permissões por perfil e por filial:**
@@ -171,7 +188,7 @@ O modelo completo está sendo desenhado junto com a rotina real de um SESMT com 
 5. ~~**PGR e ordens de serviço:** inventário de riscos por filial e OS com ciência pelo crachá~~ ✅ concluída
 6. ~~**PPCI por prédio:** projeto aprovado, alvará, projeto x instalado, manutenção de extintores e inspeção mensal por QR~~ ✅ concluída
 7. ~~**Relatórios:** PDF e Excel com código de verificação, situação "como estava em uma data" e painel de conformidade~~ ✅ concluída
-8. **Encadeamento por hash e fechamento mensal:** reforça a prova de que nada foi alterado. A correção por estorno já está pronta.
+8. ~~**Encadeamento por hash e fechamento mensal:** prova de que nada foi alterado depois~~ ✅ concluída
 
 ## Tecnologias
 
@@ -204,7 +221,7 @@ npm test
 O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 - sobe um banco temporário;
 - roda as migrations;
-- testa permissões, filtragem por filial, lotação, auditoria, entregas, estoque, treinamentos, ASOs, PGR, ordens de serviço, PPCI e relatórios;
+- testa permissões, filtragem por filial, lotação, auditoria, entregas, estoque, treinamentos, ASOs, PGR, ordens de serviço, PPCI, relatórios e integridade (travas do banco, cadeia de hash e fechamento mensal);
 - apaga tudo no fim.
 
 ## Principais rotas
@@ -230,10 +247,13 @@ O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 | POST | `/entregas/qr` | Entrega por QR + PIN (+ foto), baixa PEPS |
 | POST | `/entregas` | Entrega manual com justificativa (gestão) |
 | POST | `/entregas/:id/estorno` | Estorno de entrega (gestão) |
-| GET | `/verificar/:codigo` | Verificação pública de entrega, presença, certificado, ciência de OS, inspeção de incêndio ou relatório |
+| GET | `/verificar/:codigo` | Verificação pública de entrega, presença, certificado, ciência de OS, inspeção de incêndio, relatório ou fechamento |
 | GET | `/painel/conformidade` | Semáforo por filial e módulo (`?filial_id=&data_base=`) |
 | GET | `/relatorios/:tipo` | PDF ou Excel (`?formato=pdf\|xlsx&data_base=&todas=true`): `conformidade`, `treinamentos`, `asos`, `ordens_servico`, `ppci` |
 | GET | `/relatorios-emitidos` | Relatórios emitidos nas filiais do usuário, com código e SHA-256 |
+| GET/POST | `/fechamentos` | Fechamento mensal da filial (POST pela gestão); `?filial_id=` lista também os meses em aberto |
+| GET | `/fechamentos/:id`, `/fechamentos/:id/conferencia` | Situação congelada / conferência do que mudou desde o fechamento |
+| GET | `/auditoria/integridade` | Confere a cadeia de hash da auditoria (matriz) |
 | GET/POST/PUT | `/treinamentos` | Catálogo de treinamentos (matriz) |
 | GET/PUT | `/funcoes/:id/treinamentos` | Treinamentos exigidos pela função (matriz) |
 | GET | `/treinamentos/pendencias` | Faltando, vencidos e vencendo por filial/setor/funcionário |

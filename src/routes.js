@@ -26,6 +26,7 @@ const OrdemServicoController = require('./controllers/OrdemServicoController');
 const PpciController = require('./controllers/PpciController');
 const EquipamentoIncendioController = require('./controllers/EquipamentoIncendioController');
 const RelatorioController = require('./controllers/RelatorioController');
+const FechamentoController = require('./controllers/FechamentoController');
 const { autenticar, permitir } = require('./middlewares/auth');
 
 // Quem pode o quê (o filtro por filial é feito dentro de cada controller)
@@ -200,6 +201,13 @@ routes.post('/equipamento-inspecoes/:id/anular', gestao, EquipamentoIncendioCont
 routes.get('/painel/conformidade', RelatorioController.painel);
 routes.get('/relatorios-emitidos', RelatorioController.emitidos);
 routes.get('/relatorios/:tipo', RelatorioController.emitir);
+
+// Integridade: fechamento mensal por filial e cadeia de hash da auditoria
+routes.get('/fechamentos', FechamentoController.index);
+routes.post('/fechamentos', gestao, FechamentoController.create);
+routes.get('/fechamentos/:id', FechamentoController.show);
+routes.get('/fechamentos/:id/conferencia', FechamentoController.conferencia);
+routes.get('/auditoria/integridade', matriz, FechamentoController.integridade);
 
 // Acidentes
 routes.get('/acidentes', AcidenteController.index);

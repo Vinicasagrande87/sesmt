@@ -145,12 +145,31 @@ async function relatorio(codigo) {
   };
 }
 
+// Fechamento mensal: competência, filial, semáforo e quantidades (sem pessoas)
+async function fechamento(codigo) {
+  const f = await knex('fechamentos as f').join('filiais as fi', 'fi.id', 'f.filial_id').join('usuarios as u', 'u.id', 'f.fechado_por')
+    .where('f.codigo_verificacao', codigo)
+    .first('f.competencia', 'f.data_base', 'f.resumo', 'f.hash', 'f.hash_anterior', 'f.fechado_em', 'fi.nome as filial', 'u.nome as fechado_por');
+  if (!f) return null;
+  return {
+    tipo: 'fechamento_mensal',
+    competencia: f.competencia,
+    situacao_em: f.data_base,
+    filial: f.filial,
+    data_hora: f.fechado_em,
+    fechado_por: iniciais(f.fechado_por),
+    resumo: f.resumo,
+    sha256: f.hash,
+    sha256_anterior: f.hash_anterior
+  };
+}
+
 module.exports = {
   async verificar(req, res) {
     const codigo = String(req.params.codigo || '').toUpperCase();
     if (!/^[A-Z0-9]{8}$/.test(codigo)) return res.status(404).json({ valida: false });
     const achado = (await entrega(codigo)) || (await presenca(codigo)) || (await certificado(codigo)) || (await cienciaOs(codigo)) ||
-      (await inspecaoIncendio(codigo)) || (await relatorio(codigo));
+      (await inspecaoIncendio(codigo)) || (await relatorio(codigo)) || (await fechamento(codigo));
     if (!achado) return res.status(404).json({ valida: false });
     return res.json({ valida: true, codigo, ...achado });
   }

@@ -6,6 +6,7 @@ const cors = require('cors');
 const routes = require('./routes');
 const knex = require('./database/db');
 const { tratarErros } = require('./utils/erros');
+const { agendarSelagem } = require('./services/integridade');
 
 const app = express();
 
@@ -30,6 +31,12 @@ app.get('/status', async (req, res) => {
   } catch (error) {
     return res.status(503).json({ api: 'ok', banco: 'indisponível' });
   }
+});
+
+// Terminada a requisição, sela na cadeia de hash o que ela gravou na auditoria
+app.use((req, res, next) => {
+  res.on('finish', () => { agendarSelagem(knex); });
+  next();
 });
 
 app.use(routes);

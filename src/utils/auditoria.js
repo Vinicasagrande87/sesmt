@@ -1,6 +1,8 @@
 // Grava no log de auditoria quem fez o quê, com os dados antes e depois.
 // Use dentro da mesma transação da alteração: se a alteração falhar, o log também some.
 
+const { marcarPendente } = require('../services/integridade');
+
 // Nunca vão para o log (segredos e chaves de acesso)
 const CAMPOS_OCULTOS = ['senha_hash', 'pin_hash', 'qr_token'];
 
@@ -24,6 +26,7 @@ async function auditar(trx, req, { acao, tabela, registro_id, filial_id, antes, 
     depois: depois ? JSON.stringify(limpar(depois)) : null,
     ip: req.ip || null
   });
+  marcarPendente(); // a linha entra na cadeia de hash logo depois que a requisição termina
 }
 
 module.exports = { auditar };

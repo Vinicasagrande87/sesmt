@@ -392,7 +392,11 @@ test('erros de entrada viram 400, não 500', async () => {
 test('migrations desfazem e refazem sem erro (banco vazio)', async () => {
   const tabelas = await amb.knex('pg_tables').where({ schemaname: 'public' })
     .whereNotIn('tablename', ['knex_migrations', 'knex_migrations_lock']).pluck('tablename');
-  await amb.knex.raw(`TRUNCATE ${tabelas.map((t) => `"${t}"`).join(', ')} RESTART IDENTITY CASCADE`);
+  // As tabelas de prova recusam TRUNCATE (etapa 8): só um superusuário, desligando os gatilhos nesta transação, esvazia o banco
+  await amb.knex.transaction(async (trx) => {
+    await trx.raw('set local session_replication_role = replica');
+    await trx.raw(`TRUNCATE ${tabelas.map((t) => `"${t}"`).join(', ')} RESTART IDENTITY CASCADE`);
+  });
 
   await amb.knex.migrate.rollback(undefined, true);
   assert.equal(await amb.knex.schema.hasTable('filiais'), false);
