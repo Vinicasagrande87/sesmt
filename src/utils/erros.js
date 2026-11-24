@@ -15,7 +15,8 @@ const MENSAGENS_UNICAS = {
   filiais_cnpj_unique: 'Já existe uma filial com este CNPJ',
   setores_filial_id_nome_unique: 'Já existe um setor com este nome nesta filial',
   predios_filial_id_nome_unique: 'Já existe um prédio com este nome nesta filial',
-  funcoes_nome_unique: 'Já existe uma função com este nome'
+  funcoes_nome_unique: 'Já existe uma função com este nome',
+  equipamentos_incendio_filial_id_identificacao_unique: 'Já existe um equipamento com esta identificação nesta filial'
 };
 
 // Middleware final do Express: transforma qualquer erro em resposta JSON

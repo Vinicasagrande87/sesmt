@@ -23,6 +23,8 @@ const VerificacaoController = require('./controllers/VerificacaoController');
 const AsoController = require('./controllers/AsoController');
 const PgrController = require('./controllers/PgrController');
 const OrdemServicoController = require('./controllers/OrdemServicoController');
+const PpciController = require('./controllers/PpciController');
+const EquipamentoIncendioController = require('./controllers/EquipamentoIncendioController');
 const { autenticar, permitir } = require('./middlewares/auth');
 
 // Quem pode o quê (o filtro por filial é feito dentro de cada controller)
@@ -167,6 +169,31 @@ routes.post('/ordens-servico/ciencia', operacao, OrdemServicoController.cienciaQ
 routes.get('/ordens-servico/:id/pdf', OrdemServicoController.pdf);
 routes.post('/ordens-servico/:id/ciencias/manual', gestao, OrdemServicoController.cienciaManual);
 routes.post('/os-ciencias/:id/anular', gestao, OrdemServicoController.anularCiencia);
+
+// PPCI por prédio: projeto aprovado, alvará, equipamentos com QR, manutenções e inspeção mensal
+routes.get('/ppcis', PpciController.index);
+routes.get('/ppcis/:id', PpciController.show);
+routes.get('/ppcis/:id/arquivo', PpciController.arquivo);
+routes.post('/ppcis', operacao, PpciController.create);
+routes.post('/ppcis/:id/anular', gestao, PpciController.anular);
+routes.get('/alvaras', PpciController.alvaras);
+routes.get('/alvaras/:id/arquivo', PpciController.arquivoAlvara);
+routes.post('/alvaras', operacao, PpciController.criarAlvara);
+routes.post('/alvaras/:id/anular', gestao, PpciController.anularAlvara);
+routes.get('/predios/:id/ppci', PpciController.painelDoPredio);
+routes.get('/ppci/pendencias', PpciController.pendencias);
+
+routes.get('/equipamentos-incendio', EquipamentoIncendioController.index);
+routes.get('/equipamentos-incendio/qr/:token', operacao, EquipamentoIncendioController.buscarPorToken);
+routes.post('/equipamentos-incendio/inspecao', operacao, EquipamentoIncendioController.inspecaoQr);
+routes.post('/equipamentos-incendio', operacao, EquipamentoIncendioController.create);
+routes.get('/equipamentos-incendio/:id', EquipamentoIncendioController.show);
+routes.put('/equipamentos-incendio/:id', operacao, EquipamentoIncendioController.update);
+routes.get('/equipamentos-incendio/:id/qrcode', operacao, EquipamentoIncendioController.qrcode);
+routes.post('/equipamentos-incendio/:id/inspecoes', operacao, EquipamentoIncendioController.inspecaoManual);
+routes.post('/equipamentos-incendio/:id/manutencoes', operacao, EquipamentoIncendioController.manutencao);
+routes.post('/equipamento-manutencoes/:id/anular', gestao, EquipamentoIncendioController.anularManutencao);
+routes.post('/equipamento-inspecoes/:id/anular', gestao, EquipamentoIncendioController.anularInspecao);
 
 // Acidentes
 routes.get('/acidentes', AcidenteController.index);

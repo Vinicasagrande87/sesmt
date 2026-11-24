@@ -104,6 +104,23 @@ A ideia é usar o conhecimento técnico da área para construir uma ferramenta q
 - **Pendências:** sem PGR, setor/função fora do PGR, ciência pendente, PGR vencido e **EPI exigido pela OS que o funcionário nunca recebeu**.
 - **OS em PDF:** em branco (por grupo) ou personalizada, com a ciência e o hash do conteúdo.
 
+### PPCI por prédio
+- **Projeto aprovado (PPCI)** de cada prédio: PDF, número do processo, responsável técnico e as **medidas previstas** (extintores por agente, hidrantes, iluminação de emergência, saídas, brigada...).
+- **Alvará** (APPCI, AVCB ou outro) com validade: aviso de renovação 90 dias antes.
+- **Projeto x instalado:** o sistema compara o que o projeto prevê com os equipamentos ativos do prédio (ex.: 3 extintores PQS ABC previstos, 2 instalados = faltando) e aponta o que está instalado fora do projeto.
+- **Equipamentos com QR próprio:** a etiqueta colada no extintor ou hidrante abre o checklist do tipo de equipamento.
+- **Manutenções:**
+  - extintor: recarga (anual) e teste hidrostático (5 anos), com selo e empresa;
+  - sem teste registrado, o vencimento é estimado pelo ano de fabricação;
+  - hidrante e mangotinho: manutenção anual das mangueiras.
+- **Inspeção mensal pelo QR** em `/inspecao.html`, pelo celular:
+  - checklist Sim / Não / Não se aplica, foto opcional;
+  - item "Não" exige descrever o problema;
+  - uma inspeção por equipamento por dia, com código de verificação público;
+  - sem QR (etiqueta arrancada), só com justificativa.
+- **Pendências:** prédio sem PPCI ou alvará, alvará vencido ou vencendo, divergência com o projeto, recarga/teste/manutenção vencidos ou sem registro, inspeção atrasada e equipamento não conforme.
+- **Equipamento retirado é baixado pela gestão, com motivo:** o histórico de inspeções e manutenções continua guardado. Cada inspeção registra onde o equipamento estava naquele dia.
+
 ### Estrutura e controle
 - **Estrutura multi-filial:** matriz → filiais (cada uma com CNPJ próprio, UF, cidade e bairro) → prédios e setores. Funções num catálogo único do grupo.
 - **Permissões por perfil e por filial:**
@@ -134,10 +151,7 @@ O modelo completo está sendo desenhado junto com a rotina real de um SESMT com 
 3. ~~**Treinamentos:** exigências por função e lista de presença assinada com o crachá~~ ✅ concluída
 4. ~~**ASOs (PCMSO):** controle de vencimentos, com acesso restrito aos dados de saúde (LGPD)~~ ✅ concluída
 5. ~~**PGR e ordens de serviço:** inventário de riscos por filial e OS com ciência pelo crachá~~ ✅ concluída
-6. **PPCI por prédio:**
-   - projeto aprovado e alvará;
-   - comparação entre o que o projeto prevê e o que está instalado;
-   - manutenção de extintores e inspeção mensal por QR no equipamento.
+6. ~~**PPCI por prédio:** projeto aprovado, alvará, projeto x instalado, manutenção de extintores e inspeção mensal por QR~~ ✅ concluída
 7. **Relatórios em todas as áreas:**
    - exportação em PDF e Excel, com código de verificação;
    - consulta da situação "como estava em uma data";
@@ -174,7 +188,7 @@ npm test
 O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 - sobe um banco temporário;
 - roda as migrations;
-- testa permissões, filtragem por filial, lotação, auditoria, entregas, estoque, treinamentos, ASOs, PGR e ordens de serviço;
+- testa permissões, filtragem por filial, lotação, auditoria, entregas, estoque, treinamentos, ASOs, PGR, ordens de serviço e PPCI;
 - apaga tudo no fim.
 
 ## Principais rotas
@@ -200,7 +214,7 @@ O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 | POST | `/entregas/qr` | Entrega por QR + PIN (+ foto), baixa PEPS |
 | POST | `/entregas` | Entrega manual com justificativa (gestão) |
 | POST | `/entregas/:id/estorno` | Estorno de entrega (gestão) |
-| GET | `/verificar/:codigo` | Verificação pública de entrega, presença, certificado ou ciência de OS |
+| GET | `/verificar/:codigo` | Verificação pública de entrega, presença, certificado, ciência de OS ou inspeção de incêndio |
 | GET/POST/PUT | `/treinamentos` | Catálogo de treinamentos (matriz) |
 | GET/PUT | `/funcoes/:id/treinamentos` | Treinamentos exigidos pela função (matriz) |
 | GET | `/treinamentos/pendencias` | Faltando, vencidos e vencendo por filial/setor/funcionário |
@@ -227,6 +241,14 @@ O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 | POST | `/os-ciencias/:id/anular` | Anulação de ciência (gestão) |
 | GET | `/ordens-servico/:id/pdf` | OS em PDF (`?funcionario_id=` personaliza) |
 | GET | `/ordens-servico/pendencias` | Sem PGR, sem grupo, ciência pendente, EPI nunca entregue |
+| GET/POST | `/ppcis` | Projeto aprovado do prédio com as medidas previstas (+ `/:id/arquivo`, `/:id/anular`) |
+| GET/POST | `/alvaras` | Alvarás com validade e situação (+ `/:id/arquivo`, `/:id/anular`) |
+| GET | `/predios/:id/ppci` | Painel do prédio: PPCI, alvará, projeto x instalado e equipamentos |
+| GET | `/ppci/pendencias` | Sem PPCI/alvará, divergência, recarga/teste vencidos, inspeção atrasada, não conforme |
+| GET/POST/PUT | `/equipamentos-incendio` | Extintores, hidrantes... por prédio; baixa pela gestão |
+| GET | `/equipamentos-incendio/:id/qrcode` | PNG do QR para colar no equipamento |
+| POST | `/equipamentos-incendio/inspecao` | Inspeção mensal pelo QR (checklist + foto) |
+| POST | `/equipamentos-incendio/:id/manutencoes` | Recarga, teste hidrostático ou manutenção |
 | POST | `/estoque/entradas` | Entrada de lote com preço pago |
 | GET | `/estoque/saldos`, `/estoque/lotes`, `/estoque/movimentacoes` | Saldos valorizados, lotes e extrato |
 | POST | `/estoque/descartes`, `/estoque/ajustes` | Descarte e ajuste de inventário |

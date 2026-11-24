@@ -97,11 +97,37 @@ async function cienciaOs(codigo) {
   };
 }
 
+async function inspecaoIncendio(codigo) {
+  const i = await knex('equipamento_inspecoes as i')
+    .join('equipamentos_incendio as e', 'e.id', 'i.equipamento_id')
+    .join('predios as p', 'p.id', 'i.predio_id')
+    .join('filiais as fi', 'fi.id', 'i.filial_id')
+    .join('usuarios as u', 'u.id', 'i.usuario_id')
+    .leftJoin('inspecao_anulacoes as a', 'a.inspecao_id', 'i.id')
+    .where('i.codigo_verificacao', codigo)
+    .first('i.data_hora', 'i.metodo', 'i.conforme', 'i.localizacao', 'e.identificacao', 'e.tipo', 'p.nome as predio',
+      'fi.nome as filial', 'u.nome as inspetor', 'a.created_at as anulada_em');
+  if (!i) return null;
+  return {
+    tipo: 'inspecao_equipamento_incendio',
+    data_hora: i.data_hora,
+    equipamento: `${i.identificacao} (${i.tipo})`,
+    predio: i.predio,
+    localizacao: i.localizacao,
+    filial: i.filial,
+    resultado: i.conforme ? 'conforme' : 'não conforme',
+    inspetor: iniciais(i.inspetor),
+    leitura: i.metodo === 'qr' ? 'QR lido no equipamento' : 'Registro manual (sem leitura do QR)',
+    anulada: !!i.anulada_em
+  };
+}
+
 module.exports = {
   async verificar(req, res) {
     const codigo = String(req.params.codigo || '').toUpperCase();
     if (!/^[A-Z0-9]{8}$/.test(codigo)) return res.status(404).json({ valida: false });
-    const achado = (await entrega(codigo)) || (await presenca(codigo)) || (await certificado(codigo)) || (await cienciaOs(codigo));
+    const achado = (await entrega(codigo)) || (await presenca(codigo)) || (await certificado(codigo)) || (await cienciaOs(codigo)) ||
+      (await inspecaoIncendio(codigo));
     if (!achado) return res.status(404).json({ valida: false });
     return res.json({ valida: true, codigo, ...achado });
   }

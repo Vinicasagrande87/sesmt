@@ -42,9 +42,15 @@ function diasEntre(inicioISO, fimISO) {
   return Math.round(ms / 86400000) + 1;
 }
 
+// Data (fuso de Brasília) de um instante vindo do banco (timestamp): 'YYYY-MM-DD'
+function dataLocal(instante) {
+  if (!instante) return null;
+  return new Date(instante).toLocaleDateString('en-CA', { timeZone: FUSO });
+}
+
 function dataValida(texto) {
   if (typeof texto !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(texto)) return false;
   return somarDias(texto, 0) === texto; // rejeita 2026-02-31, por exemplo
 }
 
-module.exports = { hoje, paraISO, somarDias, somarMeses, diasEntre, dataValida };
+module.exports = { hoje, paraISO, somarDias, somarMeses, diasEntre, dataValida, dataLocal };

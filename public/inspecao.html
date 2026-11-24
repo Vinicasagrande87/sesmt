@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inspeção de equipamentos de incêndio</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, sans-serif; background: #f4f5f7; color: #1d2330; }
+    main { max-width: 480px; margin: 0 auto; padding: 16px; }
+    h1 { font-size: 1.3rem; margin: 8px 0 16px; }
+    h2 { font-size: 1.05rem; margin: 0 0 4px; }
+    .card { background: #fff; border-radius: 10px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    label { display: block; font-weight: 600; margin: 12px 0 4px; }
+    input, textarea, button { width: 100%; font-size: 1rem; padding: 12px; border-radius: 8px; border: 1px solid #c9ced8; font-family: inherit; }
+    button { border: none; background: #1f6feb; color: #fff; font-weight: 600; margin-top: 16px; cursor: pointer; }
+    button.secundario { background: #e4e7ec; color: #1d2330; }
+    button:disabled { opacity: .6; }
+    .oculto { display: none !important; }
+    .msg { padding: 12px; border-radius: 8px; margin-bottom: 16px; }
+    .ok { background: #dcf5e3; color: #11592a; }
+    .erro { background: #fde2e1; color: #8a1c17; }
+    .aviso { background: #fff4d6; color: #6b4b00; }
+    .sub { color: #5b6270; font-size: .9rem; margin: 4px 0 0; }
+    .item { border-top: 1px solid #eceef2; padding: 10px 0; }
+    .item p { margin: 0 0 8px; }
+    .opcoes { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+    .opcoes input { display: none; }
+    .opcoes span { display: block; text-align: center; padding: 10px 4px; border-radius: 8px; border: 1px solid #c9ced8; font-size: .95rem; cursor: pointer; }
+    .opcoes input:checked + span.sim { background: #dcf5e3; border-color: #2e9e57; font-weight: 600; }
+    .opcoes input:checked + span.nao { background: #fde2e1; border-color: #c9372c; font-weight: 600; }
+    .opcoes input:checked + span.na { background: #e4e7ec; border-color: #8a919e; font-weight: 600; }
+    ul { padding-left: 20px; margin: 8px 0 0; }
+    .codigo { font-family: ui-monospace, monospace; color: #5b6270; }
+    nav { margin-bottom: 12px; font-size: .95rem; }
+  </style>
+</head>
+<body>
+<main>
+  <nav><a href="leitor.html">Entrega de EPI</a> · <a href="presenca.html">Presença</a> · <strong>Inspeção de incêndio</strong></nav>
+  <h1>Inspeção mensal de equipamentos</h1>
+
+  <div id="mensagem" class="msg oculto" role="status"></div>
+
+  <section id="etapaLogin" class="card oculto">
+    <form id="formLogin">
+      <label for="email">E-mail</label>
+      <input id="email" type="email" autocomplete="username" required>
+      <label for="senha">Senha</label>
+      <input id="senha" type="password" autocomplete="current-password" required>
+      <button id="btnEntrar" type="submit">Entrar</button>
+    </form>
+  </section>
+
+  <p id="barraUsuario" class="oculto">Logado como <strong id="uNome"></strong> · <a href="#" id="lnkSair">Sair</a></p>
+
+  <section id="etapaLeitura" class="card oculto">
+    <p>Aponte a câmera para o QR colado no extintor, hidrante ou luminária.</p>
+    <div id="leitor"></div>
+  </section>
+
+  <section id="etapaChecklist" class="card oculto">
+    <h2 id="tituloEquip"></h2>
+    <p class="sub" id="subEquip"></p>
+    <div id="situacaoEquip"></div>
+    <form id="formInspecao">
+      <div id="itens"></div>
+      <label for="observacao">Observação <span class="sub">(obrigatória se algum item estiver "Não")</span></label>
+      <textarea id="observacao" rows="3" maxlength="2000"></textarea>
+      <label for="foto">Foto (opcional)</label>
+      <input id="foto" type="file" accept="image/*" capture="environment">
+      <button id="btnRegistrar" type="submit">Registrar inspeção</button>
+    </form>
+    <button id="btnCancelar" class="secundario" type="button">Ler outro equipamento</button>
+  </section>
+
+  <section id="etapaLista" class="card oculto">
+    <h2>Inspecionados agora (<span id="total">0</span>)</h2>
+    <ul id="lista"></ul>
+  </section>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  let tokenAtual = null;
+  let equipAtual = null;
+  let leitor = null;
+  const feitos = [];
+
+  function mostrarMensagem(texto, tipo) { const el = $('mensagem'); el.textContent = texto; el.className = 'msg ' + tipo; }
+  function limparMensagem() { $('mensagem').className = 'msg oculto'; }
+  function exibir(id, visivel) { $(id).classList.toggle('oculto', !visivel); }
+  const dataBR = (iso) => iso ? iso.slice(0, 10).split('-').reverse().join('/') : '';
+
+  const sessao = {
+    get() { try { return JSON.parse(sessionStorage.getItem('sesmt_sessao')); } catch { return null; } },
+    set(v) { try { sessionStorage.setItem('sesmt_sessao', JSON.stringify(v)); } catch {} },
+    limpar() { try { sessionStorage.removeItem('sesmt_sessao'); } catch {} }
+  };
+  let sessaoAtual = sessao.get();
+
+  async function chamarApi(url, opcoes = {}) {
+    const headers = { ...(opcoes.headers || {}) };
+    if (sessaoAtual) headers.Authorization = 'Bearer ' + sessaoAtual.token;
+    if (opcoes.body) headers['Content-Type'] = 'application/json';
+    const resp = await fetch(url, { ...opcoes, headers });
+    const corpo = await resp.json().catch(() => ({}));
+    if (resp.status === 401 && sessaoAtual) { sair(); throw new Error(corpo.error || 'Sessão expirada'); }
+    if (!resp.ok) throw new Error(corpo.error || 'Erro ' + resp.status);
+    return corpo;
+  }
+
+  async function sair() {
+    sessaoAtual = null;
+    sessao.limpar();
+    await pararLeitura();
+    ['barraUsuario', 'etapaLeitura', 'etapaChecklist', 'etapaLista'].forEach((id) => exibir(id, false));
+    exibir('etapaLogin', true);
+  }
+
+  function entrar() {
+    exibir('etapaLogin', false);
+    $('uNome').textContent = sessaoAtual.usuario.nome;
+    exibir('barraUsuario', true);
+    exibir('etapaLista', true);
+    iniciarLeitura();
+  }
+
+  $('formLogin').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    $('btnEntrar').disabled = true;
+    limparMensagem();
+    try {
+      sessaoAtual = await chamarApi('/auth/login', { method: 'POST', body: JSON.stringify({ email: $('email').value, senha: $('senha').value }) });
+      sessao.set(sessaoAtual);
+      $('senha').value = '';
+      entrar();
+    } catch (e) { mostrarMensagem(e.message, 'erro'); } finally { $('btnEntrar').disabled = false; }
+  });
+  $('lnkSair').addEventListener('click', (ev) => { ev.preventDefault(); limparMensagem(); sair(); });
+
+  async function pararLeitura() { if (leitor && leitor.isScanning) await leitor.stop().catch(() => {}); }
+
+  async function iniciarLeitura() {
+    tokenAtual = null;
+    exibir('etapaChecklist', false);
+    exibir('etapaLeitura', true);
+    leitor = leitor || new Html5Qrcode('leitor');
+    try {
+      await leitor.start({ facingMode: 'environment' }, { fps: 10, qrbox: 250 }, aoLerQr, () => {});
+    } catch (e) {
+      mostrarMensagem('Não foi possível abrir a câmera: ' + e + '. No celular, a página precisa ser aberta por HTTPS.', 'erro');
+    }
+  }
+
+  function linhaSituacao(eq) {
+    const box = $('situacaoEquip');
+    box.innerHTML = '';
+    const avisos = [];
+    for (const [tipo, m] of Object.entries(eq.manutencoes)) {
+      const nome = { recarga: 'Recarga', teste_hidrostatico: 'Teste hidrostático', manutencao: 'Manutenção' }[tipo] || tipo;
+      if (m.situacao === 'vencida') avisos.push(`${nome} vencida em ${dataBR(m.data_proxima)}${m.estimada ? ' (estimada pelo ano de fabricação)' : ''}`);
+      else if (m.situacao === 'vencendo') avisos.push(`${nome} vence em ${dataBR(m.data_proxima)}`);
+      else if (m.situacao === 'nao_registrada') avisos.push(`${nome} sem registro no sistema`);
+    }
+    if (eq.inspecao && !eq.inspecao.conforme) avisos.push(`Última inspeção (${dataBR(eq.inspecao.data)}) não conforme: ${eq.inspecao.observacao || ''}`);
+    if (!avisos.length) return;
+    const div = document.createElement('div');
+    div.className = 'msg aviso';
+    const ul = document.createElement('ul');
+    for (const a of avisos) { const li = document.createElement('li'); li.textContent = a; ul.appendChild(li); }
+    div.appendChild(ul);
+    box.appendChild(div);
+  }
+
+  function montarChecklist(checklist) {
+    const box = $('itens');
+    box.innerHTML = '';
+    for (const { chave, descricao } of checklist) {
+      const item = document.createElement('div');
+      item.className = 'item';
+      const p = document.createElement('p');
+      p.textContent = descricao;
+      item.appendChild(p);
+      const opcoes = document.createElement('div');
+      opcoes.className = 'opcoes';
+      for (const [valor, rotulo, classe] of [['true', 'Sim', 'sim'], ['false', 'Não', 'nao'], ['null', 'N/A', 'na']]) {
+        const label = document.createElement('label');
+        label.style.margin = '0';
+        const input = document.createElement('input');
+        input.type = 'radio'; input.name = chave; input.value = valor;
+        if (valor === 'true') input.checked = true;
+        const span = document.createElement('span');
+        span.className = classe; span.textContent = rotulo;
+        label.append(input, span);
+        opcoes.appendChild(label);
+      }
+      item.appendChild(opcoes);
+      box.appendChild(item);
+    }
+  }
+
+  async function aoLerQr(texto) {
+    if (tokenAtual) return;
+    tokenAtual = texto.trim();
+    await pararLeitura();
+    try {
+      const eq = await chamarApi('/equipamentos-incendio/qr/' + encodeURIComponent(tokenAtual));
+      equipAtual = eq;
+      $('tituloEquip').textContent = `${eq.identificacao} · ${eq.nome_tipo}${eq.agente_nome ? ' ' + eq.agente_nome : ''}${eq.capacidade ? ' ' + eq.capacidade : ''}`;
+      $('subEquip').textContent = `${eq.predio} · ${eq.localizacao}`;
+      linhaSituacao(eq);
+      $('formInspecao').reset();
+      montarChecklist(eq.checklist);
+      exibir('etapaLeitura', false);
+      exibir('etapaChecklist', true);
+      if (eq.inspecionado_hoje) mostrarMensagem('Este equipamento já foi inspecionado hoje.', 'aviso'); else limparMensagem();
+    } catch (e) {
+      mostrarMensagem(e.message, 'erro');
+      iniciarLeitura();
+    }
+  }
+
+  $('btnCancelar').addEventListener('click', () => { limparMensagem(); iniciarLeitura(); });
+
+  const lerArquivo = (arquivo) => new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(new Error('Não consegui ler a foto'));
+    r.readAsDataURL(arquivo);
+  });
+
+  $('formInspecao').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    $('btnRegistrar').disabled = true;
+    try {
+      const itens = {};
+      for (const { chave } of equipAtual.checklist) {
+        const marcado = document.querySelector(`input[name="${chave}"]:checked`);
+        itens[chave] = JSON.parse(marcado ? marcado.value : 'true');
+      }
+      const corpo = { token: tokenAtual, itens, observacao: $('observacao').value || undefined };
+      if ($('foto').files[0]) corpo.foto = await lerArquivo($('foto').files[0]);
+      const r = await chamarApi('/equipamentos-incendio/inspecao', { method: 'POST', body: JSON.stringify(corpo) });
+      feitos.unshift(r);
+      const li = document.createElement('li');
+      li.textContent = `${r.identificacao}: ${r.conforme ? 'conforme' : 'NÃO conforme'} `;
+      const cod = document.createElement('span');
+      cod.className = 'codigo'; cod.textContent = r.codigo_verificacao;
+      li.appendChild(cod);
+      $('lista').prepend(li);
+      $('total').textContent = feitos.length;
+      mostrarMensagem(`Inspeção de ${r.identificacao} registrada (${r.codigo_verificacao}).`, r.conforme ? 'ok' : 'aviso');
+      iniciarLeitura();
+    } catch (e) { mostrarMensagem(e.message, 'erro'); } finally { $('btnRegistrar').disabled = false; }
+  });
+
+  if (sessaoAtual) entrar(); else sair();
+</script>
+</body>
+</html>
