@@ -13,15 +13,8 @@ const { osVigenteDoFuncionario } = require('../services/pgr');
 const { buscarNoEscopo } = require('./FuncionarioController');
 const { gerarOrdemServico } = require('../relatorios/ordemServico');
 
-const SITUACOES = ['sem_pgr', 'sem_grupo', 'ciencia_pendente', 'em_dia'];
-
-function cienciaValida(trx, osId, funcionarioId) {
-  return trx('os_ciencias as c')
-    .leftJoin('os_ciencia_anulacoes as a', 'a.ciencia_id', 'c.id')
-    .where({ 'c.ordem_servico_id': osId, 'c.funcionario_id': funcionarioId })
-    .whereNull('a.id')
-    .first('c.*');
-}
+const { SITUACOES, cienciaValida, episNuncaEntregues, situacaoOrdensServico, osEmDia } = require('../services/ordensServico');
+const { lerDataBase, filtrarPendencias } = require('../services/historico');
 
 async function registrarCiencia(trx, req, { funcionario, os, pgr, metodo, pinValidado, data_ciencia, observacao, arquivo_id }) {
   if (funcionario.status !== 'Ativo') throw new ErroDeNegocio(409, `Funcionário com status "${funcionario.status}" não pode dar ciência`);
@@ -41,15 +34,6 @@ async function registrarCiencia(trx, req, { funcionario, os, pgr, metodo, pinVal
     setor: os.conteudo.setor, atividade: os.conteudo.atividade, assinado_em: ciencia.assinado_em,
     codigo_verificacao: ciencia.codigo_verificacao
   };
-}
-
-// EPIs exigidos pela OS (vinculados ao catálogo) que o funcionário nunca recebeu
-async function episNuncaEntregues(trx, funcionarioId, conteudo) {
-  const exigidos = conteudo.epis.filter((e) => e.epi_id);
-  if (!exigidos.length) return [];
-  const recebidos = new Set(await trx('entregas as e').leftJoin('entrega_estornos as est', 'est.entrega_id', 'e.id')
-    .where('e.funcionario_id', funcionarioId).whereNull('est.id').distinct('e.epi_id').pluck('e.epi_id'));
-  return exigidos.filter((e) => !recebidos.has(e.epi_id)).map((e) => `${e.parte_corpo}: ${e.descricao}`);
 }
 
 module.exports = {
@@ -164,41 +148,11 @@ module.exports = {
     doc.pipe(res);
   },
 
-  // GET /ordens-servico/pendencias?filial_id=&setor_id=&funcionario_id=&situacao=&todas=true
+  // GET /ordens-servico/pendencias?filial_id=&setor_id=&funcionario_id=&situacao=&todas=true&data_base=
   async pendencias(req, res) {
     if (req.query.situacao && !SITUACOES.includes(req.query.situacao)) throw new ErroDeNegocio(400, `situacao deve ser: ${SITUACOES.join(', ')}`);
-    const query = noEscopo(knex('funcionarios as f'), req, 'f.filial_id')
-      .join('filiais as fi', 'fi.id', 'f.filial_id')
-      .leftJoin('setores as s', 's.id', 'f.setor_id')
-      .leftJoin('funcoes as fn', 'fn.id', 'f.funcao_id')
-      .where('f.status', 'Ativo')
-      .orderBy('f.nome')
-      .select('f.id', 'f.nome', 'f.matricula', 'f.filial_id', 'f.setor_id', 'f.funcao_id', 'f.status',
-        'fi.nome as filial', 's.nome as setor', 'fn.nome as funcao');
-    if (req.query.filial_id) query.where('f.filial_id', req.query.filial_id);
-    if (req.query.setor_id) query.where('f.setor_id', req.query.setor_id);
-    if (req.query.funcionario_id) query.where('f.id', req.query.funcionario_id);
-
-    const dataHoje = hoje();
-    let itens = [];
-    for (const f of await query) {
-      const atual = await osVigenteDoFuncionario(knex, f);
-      const base = { funcionario_id: f.id, funcionario: f.nome, matricula: f.matricula, filial: f.filial, setor: f.setor, funcao: f.funcao };
-      if (atual.situacao !== 'ok') {
-        itens.push({ ...base, situacao: atual.situacao, pgr_vencido: atual.pgr ? atual.pgr.data_fim < dataHoje : null });
-        continue;
-      }
-      const ciencia = await cienciaValida(knex, atual.os.id, f.id);
-      itens.push({
-        ...base, situacao: ciencia ? 'em_dia' : 'ciencia_pendente', ordem_servico_id: atual.os.id,
-        pgr_vencido: atual.pgr.data_fim < dataHoje, ciencia_em: ciencia ? ciencia.assinado_em : null,
-        epis_nunca_entregues: await episNuncaEntregues(knex, f.id, atual.os.conteudo)
-      });
-    }
-    if (req.query.situacao) itens = itens.filter((i) => i.situacao === req.query.situacao);
-    else if (req.query.todas !== 'true') itens = itens.filter((i) => i.situacao !== 'em_dia' || i.pgr_vencido || (i.epis_nunca_entregues || []).length);
-    itens.sort((a, b) => SITUACOES.indexOf(a.situacao) - SITUACOES.indexOf(b.situacao) || a.funcionario.localeCompare(b.funcionario));
-    const resumo = Object.fromEntries(SITUACOES.map((s) => [s, itens.filter((i) => i.situacao === s).length]));
-    return res.json({ resumo, itens });
+    const { dataBase } = lerDataBase(req.query);
+    const itens = await situacaoOrdensServico(knex, req, req.query, { dataBase });
+    return res.json({ data_base: dataBase || hoje(), ...filtrarPendencias(itens, SITUACOES, req.query, { emDia: osEmDia }) });
   }
 };

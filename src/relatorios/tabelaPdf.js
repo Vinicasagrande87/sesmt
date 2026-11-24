@@ -1,6 +1,7 @@
 // Tabela simples para PDFKit, com quebra de página repetindo o cabeçalho e rodapé numerado.
 
-function desenharTabela(doc, { colunas, linhas, destacar }) {
+// destacar(i): linha em vermelho; corDaLinha(i): cor do texto da linha (ou null)
+function desenharTabela(doc, { colunas, linhas, destacar, corDaLinha }) {
   const x0 = doc.page.margins.left;
   const largura = colunas.reduce((t, c) => t + c.largura, 0);
 
@@ -32,6 +33,8 @@ function desenharTabela(doc, { colunas, linhas, destacar }) {
     const y = doc.y;
     if (i % 2) doc.rect(x0, y, largura, altura).fill('#f6f7f9').fillColor('#000');
     if (destacar && destacar(i)) doc.fillColor('#8a1c17');
+    const cor = corDaLinha && corDaLinha(i);
+    if (cor) doc.fillColor(cor);
     let x = x0;
     valores.forEach((v, k) => {
       doc.text(String(v ?? ''), x + 2, y + 3, { width: colunas[k].largura - 4 });

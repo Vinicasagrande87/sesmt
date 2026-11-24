@@ -1,7 +1,8 @@
 // Situação do ASO de cada funcionário (NR-7).
 // Vale o ASO não anulado mais recente (que não seja demissional): se ele deu inapto, é isso que importa,
 // mesmo que um ASO anterior ainda estivesse "no prazo".
-const { hoje, somarDias, diasEntre } = require('../utils/datas');
+const { hoje, somarDias, diasEntre, fimDoDia } = require('../utils/datas');
+const { funcionariosNaData } = require('./historico');
 
 const TIPOS = ['admissional', 'periodico', 'retorno_trabalho', 'mudanca_risco', 'demissional'];
 const RESULTADOS = ['apto', 'apto_restricao', 'inapto'];
@@ -16,14 +17,16 @@ function diasDispensaDemissional(grauRisco) {
 }
 
 // ASOs válidos (não anulados) dos funcionários, do mais recente para o mais antigo
-async function asosValidos(trx, funcionarioIds) {
+async function asosValidos(trx, funcionarioIds, { dataBase = null } = {}) {
   if (!funcionarioIds.length) return new Map();
-  const linhas = await trx('asos as a')
+  const q = trx('asos as a')
     .leftJoin('aso_anulacoes as n', 'n.aso_id', 'a.id')
     .whereIn('a.funcionario_id', funcionarioIds)
     .whereNull('n.id')
-    .select('a.id', 'a.funcionario_id', 'a.tipo', 'a.data_exame', 'a.resultado', 'a.data_vencimento')
+    .select('a.id', 'a.funcionario_id', 'a.tipo', 'a.data_exame', 'a.resultado', 'a.data_vencimento', 'a.created_at')
     .orderBy([{ column: 'a.data_exame', order: 'desc' }, { column: 'a.id', order: 'desc' }]);
+  if (dataBase) q.where('a.data_exame', '<=', dataBase);
+  const linhas = await q;
   const porFuncionario = new Map();
   for (const a of linhas) {
     if (!porFuncionario.has(a.funcionario_id)) porFuncionario.set(a.funcionario_id, []);
@@ -41,10 +44,11 @@ function situacaoAtivo(ultimo, { dataHoje, limite }) {
 }
 
 // funcionarios: [{ id, nome, matricula, status, data_demissao, filial_id, filial, grau_risco, setor, funcao }]
-async function situacaoDosAsos(trx, funcionarios, { dias = 30 } = {}) {
-  const asos = await asosValidos(trx, funcionarios.map((f) => f.id));
-  const dataHoje = hoje();
+async function situacaoDosAsos(trx, funcionarios, { dias = 30, dataBase = null } = {}) {
+  const asos = await asosValidos(trx, funcionarios.map((f) => f.id), { dataBase });
+  const dataHoje = dataBase || hoje();
   const limite = somarDias(dataHoje, dias);
+  const corte = dataBase ? fimDoDia(dataBase) : null;
   const resultado = [];
 
   for (const f of funcionarios) {
@@ -63,7 +67,8 @@ async function situacaoDosAsos(trx, funcionarios, { dias = 30 } = {}) {
         ultimo_exame: ultimo ? ultimo.data_exame : null,
         ultimo_tipo: ultimo ? ultimo.tipo : null,
         vencimento: ultimo ? ultimo.data_vencimento : null,
-        aso_id: ultimo ? ultimo.id : null
+        aso_id: ultimo ? ultimo.id : null,
+        ...(corte ? { lancado_depois: !!ultimo && new Date(ultimo.created_at) >= corte } : {})
       });
       continue;
     }
@@ -91,4 +96,10 @@ async function situacaoDosAsos(trx, funcionarios, { dias = 30 } = {}) {
     a.funcionario.localeCompare(b.funcionario));
 }
 
-module.exports = { situacaoDosAsos, TIPOS, RESULTADOS, SITUACOES, diasDispensaDemissional };
+// Todas as linhas (inclusive em dia), hoje ou na data-base
+async function situacaoAsos(db, req, filtros = {}, { dias = 30, dataBase = null } = {}) {
+  const funcionarios = await funcionariosNaData(db, req, filtros, { dataBase, incluirDesligados: true, janelaDesligados: JANELA_DESLIGADOS_DIAS });
+  return situacaoDosAsos(db, funcionarios, { dias, dataBase });
+}
+
+module.exports = { situacaoDosAsos, situacaoAsos, TIPOS, RESULTADOS, SITUACOES, diasDispensaDemissional };

@@ -8,7 +8,8 @@ const { podeAcessarFilial, noEscopo } = require('../utils/escopo');
 const { hoje, dataValida, somarMeses } = require('../utils/datas');
 const { UFS, exigirCampos, idValido } = require('../utils/validacao');
 const { salvarArquivo } = require('../utils/arquivos');
-const { situacaoDosAsos, TIPOS, RESULTADOS, SITUACOES } = require('../services/asos');
+const { situacaoAsos, TIPOS, RESULTADOS, SITUACOES } = require('../services/asos');
+const { lerDataBase, lerDias, filtrarPendencias } = require('../services/historico');
 const { buscarNoEscopo } = require('./FuncionarioController');
 
 const PERFIS_SAUDE = ['admin', 'saude'];
@@ -132,28 +133,14 @@ module.exports = {
   },
 
   // GET /asos/pendencias?filial_id=&setor_id=&funcionario_id=&situacao=&dias=30&todas=true
+  // ?data_base=AAAA-MM-DD: como estava naquela data
   async pendencias(req, res) {
-    const dias = req.query.dias !== undefined ? Number(req.query.dias) : 30;
-    if (!Number.isInteger(dias) || dias < 0 || dias > 365) throw new ErroDeNegocio(400, 'dias deve ser um inteiro entre 0 e 365');
+    const dias = lerDias(req.query, 'dias', 30);
+    const { dataBase } = lerDataBase(req.query);
     if (req.query.situacao && !SITUACOES.includes(req.query.situacao)) {
       throw new ErroDeNegocio(400, `situacao deve ser: ${SITUACOES.join(', ')}`);
     }
-
-    const query = noEscopo(knex('funcionarios as f'), req, 'f.filial_id')
-      .join('filiais as fi', 'fi.id', 'f.filial_id')
-      .leftJoin('setores as s', 's.id', 'f.setor_id')
-      .leftJoin('funcoes as fn', 'fn.id', 'f.funcao_id')
-      .select('f.id', 'f.nome', 'f.matricula', 'f.status', 'f.data_demissao', 'f.filial_id',
-        'fi.nome as filial', 'fi.grau_risco', 's.nome as setor', 'fn.nome as funcao');
-    if (req.query.filial_id) query.where('f.filial_id', req.query.filial_id);
-    if (req.query.setor_id) query.where('f.setor_id', req.query.setor_id);
-    if (req.query.funcionario_id) query.where('f.id', req.query.funcionario_id);
-
-    let linhas = await situacaoDosAsos(knex, await query, { dias });
-    if (req.query.situacao) linhas = linhas.filter((l) => l.situacao === req.query.situacao);
-    else if (req.query.todas !== 'true') linhas = linhas.filter((l) => l.situacao !== 'em_dia');
-
-    const resumo = Object.fromEntries(SITUACOES.map((s) => [s, linhas.filter((l) => l.situacao === s).length]));
-    return res.json({ resumo, itens: linhas });
+    const linhas = await situacaoAsos(knex, req, req.query, { dias, dataBase });
+    return res.json({ data_base: dataBase || hoje(), ...filtrarPendencias(linhas, SITUACOES, req.query) });
   }
 };

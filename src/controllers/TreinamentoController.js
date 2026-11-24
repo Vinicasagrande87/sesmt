@@ -78,6 +78,17 @@ module.exports = {
       const antes = await trx('funcao_treinamentos').where({ funcao_id: funcao.id }).pluck('treinamento_id');
       await trx('funcao_treinamentos').where({ funcao_id: funcao.id }).del();
       if (ids.length) await trx('funcao_treinamentos').insert(ids.map((treinamento_id) => ({ funcao_id: funcao.id, treinamento_id })));
+      // Histórico (relatórios "como estava em"): encerra o que saiu e abre o que entrou
+      const saiu = antes.filter((t) => !ids.includes(t));
+      const entrou = ids.filter((t) => !antes.includes(t));
+      if (saiu.length) {
+        await trx('funcao_treinamento_vigencias').where({ funcao_id: funcao.id }).whereIn('treinamento_id', saiu).whereNull('fim')
+          .update({ fim: trx.fn.now() });
+      }
+      if (entrou.length) {
+        await trx('funcao_treinamento_vigencias')
+          .insert(entrou.map((treinamento_id) => ({ funcao_id: funcao.id, treinamento_id, inicio: trx.fn.now(), usuario_id: req.usuario.id })));
+      }
       await auditar(trx, req, { acao: 'definir_exigencias', tabela: 'funcoes', registro_id: funcao.id, antes: { treinamentos: antes }, depois: { treinamentos: ids } });
     });
     return module.exports.exigidosDaFuncao(req, res);

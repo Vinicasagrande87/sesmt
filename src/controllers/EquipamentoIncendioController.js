@@ -197,6 +197,7 @@ module.exports = {
       const [eq] = await trx('equipamentos_incendio').insert({
         ...dados, filial_id: predio.filial_id, predio_id: predio.id, tipo: b.tipo, qr_token: crypto.randomUUID()
       }).returning('*');
+      await trx('equipamento_historico').insert({ equipamento_id: eq.id, predio_id: eq.predio_id, ativo: true, inicio: eq.created_at, usuario_id: req.usuario.id });
       await auditar(trx, req, { acao: 'cadastrar_equipamento_incendio', tabela: 'equipamentos_incendio', registro_id: eq.id, filial_id: eq.filial_id, depois: eq });
       const manutencoes = [];
       for (const [i, m] of (b.manutencoes || []).entries()) {
@@ -229,6 +230,9 @@ module.exports = {
       }
       if (!Object.keys(dados).length) throw new ErroDeNegocio(400, 'Nada para alterar');
       const [depois] = await trx('equipamentos_incendio').where({ id: eq.id }).update({ ...dados, updated_at: knex.fn.now() }).returning('*');
+      if (depois.predio_id !== eq.predio_id || depois.ativo !== eq.ativo) {
+        await trx('equipamento_historico').insert({ equipamento_id: eq.id, predio_id: depois.predio_id, ativo: depois.ativo, inicio: depois.updated_at, usuario_id: req.usuario.id });
+      }
       await auditar(trx, req, { acao: 'alterar_equipamento_incendio', tabela: 'equipamentos_incendio', registro_id: eq.id, filial_id: eq.filial_id, antes: eq, depois });
       return depois;
     });

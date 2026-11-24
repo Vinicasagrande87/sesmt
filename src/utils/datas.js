@@ -53,4 +53,10 @@ function dataValida(texto) {
   return somarDias(texto, 0) === texto; // rejeita 2026-02-31, por exemplo
 }
 
-module.exports = { hoje, paraISO, somarDias, somarMeses, diasEntre, dataValida, dataLocal };
+// Primeiro instante do dia seguinte em Brasília: "até o fim do dia D" = instante < fimDoDia(D).
+// O Brasil não tem horário de verão desde 2019, então o fuso é sempre -03:00.
+function fimDoDia(dataISO) {
+  return new Date(`${somarDias(dataISO, 1)}T00:00:00-03:00`);
+}
+
+module.exports = { hoje, paraISO, somarDias, somarMeses, diasEntre, dataValida, dataLocal, fimDoDia };

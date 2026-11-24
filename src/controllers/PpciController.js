@@ -8,6 +8,7 @@ const { hoje, dataValida, paraISO } = require('../utils/datas');
 const { exigirCampos, idValido } = require('../utils/validacao');
 const { salvarArquivo } = require('../utils/arquivos');
 const P = require('../services/ppci');
+const { lerDataBase, lerDias } = require('../services/historico');
 
 const TIPOS_ARQUIVO = ['application/pdf', 'image/jpeg', 'image/png'];
 const MAX_ARQUIVO = 12 * 1024 * 1024;
@@ -86,31 +87,12 @@ function listar(req, { tabela, anulacoes, fk, ordem }) {
   return q;
 }
 
-// Painel de um prédio: PPCI e alvará que valem hoje, comparação e equipamentos com a situação
-async function painel(db, predio, { dias, diasAlvara } = {}) {
-  const ppci = (await P.ppcisVigentes(db, [predio.id])).get(predio.id) || null;
-  const alvara = (await P.alvarasVigentes(db, [predio.id])).get(predio.id) || null;
-  const medidas = ppci ? await db('ppci_medidas').where({ ppci_id: ppci.id }).orderBy('id') : [];
-  const equipamentos = await db('equipamentos_incendio').where({ predio_id: predio.id, ativo: true }).orderBy('identificacao');
-  const situacao = await P.situacaoDosEquipamentos(db, equipamentos, { dias });
-  const comparacao = ppci ? P.compararProjeto(medidas, equipamentos) : [];
+function opcoesDaQuery(req) {
   return {
-    ppci: ppci && { ...ppci, data_aprovacao: paraISO(ppci.data_aprovacao), medidas },
-    alvara: alvara && { ...alvara, data_emissao: paraISO(alvara.data_emissao), data_validade: paraISO(alvara.data_validade) },
-    situacao_alvara: P.situacaoDoAlvara(alvara, { dias: diasAlvara }),
-    comparacao,
-    equipamentos: situacao
+    dias: lerDias(req.query, 'dias', P.DIAS_EQUIPAMENTO),
+    diasAlvara: lerDias(req.query, 'dias_alvara', P.DIAS_ALVARA),
+    dataBase: lerDataBase(req.query).dataBase
   };
-}
-
-function diasDaQuery(req) {
-  const ler = (nome, padrao) => {
-    if (req.query[nome] === undefined) return padrao;
-    const n = Number(req.query[nome]);
-    if (!Number.isInteger(n) || n < 0 || n > 365) throw new ErroDeNegocio(400, `${nome} deve ser um inteiro entre 0 e 365`);
-    return n;
-  };
-  return { dias: ler('dias', P.DIAS_EQUIPAMENTO), diasAlvara: ler('dias_alvara', P.DIAS_ALVARA) };
 }
 
 module.exports = {
@@ -188,50 +170,21 @@ module.exports = {
   anularAlvara: (req, res) => anular(req, res, { tabela: 'alvaras', anulacoes: 'alvara_anulacoes', fk: 'alvara_id', nome: 'Alvará', acao: 'anular_alvara' }),
   arquivoAlvara: (req, res) => enviarArquivo(req, res, { tabela: 'alvaras', nome: 'Alvará', prefixo: 'alvara' }),
 
-  // GET /predios/:id/ppci?dias=30&dias_alvara=90 — painel do prédio
+  // GET /predios/:id/ppci?dias=30&dias_alvara=90&data_base= — painel do prédio
   async painelDoPredio(req, res) {
     const predio = await predioNoEscopo(knex, req, req.params.id);
-    return res.json({ predio, ...(await painel(knex, predio, diasDaQuery(req))) });
+    const opcoes = opcoesDaQuery(req);
+    return res.json({ data_base: opcoes.dataBase || hoje(), predio, ...(await P.painelDoPredio(knex, predio, opcoes)) });
   },
 
-  // GET /ppci/pendencias?filial_id=&predio_id=&situacao=&dias=30&dias_alvara=90
+  // GET /ppci/pendencias?filial_id=&predio_id=&situacao=&dias=30&dias_alvara=90&data_base=
   async pendencias(req, res) {
-    const { dias, diasAlvara } = diasDaQuery(req);
+    const opcoes = opcoesDaQuery(req);
     const situacoes = [...P.SITUACOES_PREDIO, ...P.SITUACOES_EQUIPAMENTO];
     if (req.query.situacao && !situacoes.includes(req.query.situacao)) throw new ErroDeNegocio(400, `situacao deve ser: ${situacoes.join(', ')}`);
-
-    const q = noEscopo(knex('predios as p'), req, 'p.filial_id').join('filiais as f', 'f.id', 'p.filial_id')
-      .where('p.ativo', true).select('p.*', 'f.nome as filial').orderBy(['f.nome', 'p.nome']);
-    if (req.query.filial_id) q.where('p.filial_id', req.query.filial_id);
-    if (req.query.predio_id) q.where('p.id', req.query.predio_id);
-    const predios = await q;
-
-    const itens = [];
-    for (const predio of predios) {
-      const pn = await painel(knex, predio, { dias, diasAlvara });
-      const base = { filial_id: predio.filial_id, filial: predio.filial, predio_id: predio.id, predio: predio.nome };
-      if (!pn.ppci) itens.push({ ...base, nivel: 'predio', situacao: 'sem_ppci' });
-      if (pn.situacao_alvara !== 'vigente') {
-        itens.push({ ...base, nivel: 'predio', situacao: pn.situacao_alvara === 'sem_alvara' ? 'sem_alvara' : `alvara_${pn.situacao_alvara}`,
-          data_validade: pn.alvara ? pn.alvara.data_validade : null });
-      }
-      const faltando = pn.comparacao.filter((c) => c.situacao === 'faltando');
-      if (faltando.length) {
-        itens.push({ ...base, nivel: 'predio', situacao: 'divergencia_projeto',
-          detalhe: faltando.map((c) => ({ tipo: c.tipo, agente: c.agente, previsto: c.previsto, instalado: c.instalado })) });
-      }
-      for (const eq of pn.equipamentos) {
-        for (const situacao of eq.pendencias) {
-          const manut = eq.manutencoes[situacao.replace(/_(vencida|vencendo|nao_registrada)$/, '')];
-          itens.push({ ...base, nivel: 'equipamento', situacao, equipamento_id: eq.id, identificacao: eq.identificacao, tipo: eq.tipo,
-            agente: eq.agente, localizacao: eq.localizacao,
-            data_limite: situacao.startsWith('inspecao') ? (eq.inspecao ? eq.inspecao.proxima : null) : (manut ? manut.data_proxima : null),
-            ...(situacao === 'nao_conforme' ? { nao_conformes: eq.inspecao.nao_conformes, observacao: eq.inspecao.observacao } : {}) });
-        }
-      }
-    }
+    const { itens } = await P.situacaoPpci(knex, req, req.query, opcoes);
     const filtrados = req.query.situacao ? itens.filter((i) => i.situacao === req.query.situacao) : itens;
     const resumo = Object.fromEntries(situacoes.map((s) => [s, filtrados.filter((i) => i.situacao === s).length]).filter(([, n]) => n));
-    return res.json({ resumo, itens: filtrados });
+    return res.json({ data_base: opcoes.dataBase || hoje(), resumo, itens: filtrados });
   }
 };

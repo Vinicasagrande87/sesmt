@@ -122,12 +122,35 @@ async function inspecaoIncendio(codigo) {
   };
 }
 
+// Relatório emitido: só o resumo (contagens), nunca a lista de pessoas
+async function relatorio(codigo) {
+  const r = await knex('relatorios_emitidos as r').join('usuarios as u', 'u.id', 'r.emitido_por')
+    .where('r.codigo_verificacao', codigo)
+    .first('r.tipo', 'r.formato', 'r.data_base', 'r.resumo', 'r.total_itens', 'r.hash_conteudo', 'r.hash_arquivo', 'r.emitido_em',
+      'r.filial_ids', knex.raw("r.conteudo->>'titulo' as titulo"), 'u.nome as emitido_por');
+  if (!r) return null;
+  const filiais = await knex('filiais').whereIn('id', r.filial_ids).orderBy('nome').pluck('nome');
+  return {
+    tipo: 'relatorio',
+    relatorio: r.titulo,
+    formato: r.formato,
+    situacao_em: r.data_base,
+    data_hora: r.emitido_em,
+    emitido_por: iniciais(r.emitido_por),
+    filiais,
+    total_itens: r.total_itens,
+    resumo: r.resumo,
+    sha256_conteudo: r.hash_conteudo,
+    sha256_arquivo: r.hash_arquivo
+  };
+}
+
 module.exports = {
   async verificar(req, res) {
     const codigo = String(req.params.codigo || '').toUpperCase();
     if (!/^[A-Z0-9]{8}$/.test(codigo)) return res.status(404).json({ valida: false });
     const achado = (await entrega(codigo)) || (await presenca(codigo)) || (await certificado(codigo)) || (await cienciaOs(codigo)) ||
-      (await inspecaoIncendio(codigo));
+      (await inspecaoIncendio(codigo)) || (await relatorio(codigo));
     if (!achado) return res.status(404).json({ valida: false });
     return res.json({ valida: true, codigo, ...achado });
   }

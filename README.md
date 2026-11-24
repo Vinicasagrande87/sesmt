@@ -121,6 +121,24 @@ A ideia é usar o conhecimento técnico da área para construir uma ferramenta q
 - **Pendências:** prédio sem PPCI ou alvará, alvará vencido ou vencendo, divergência com o projeto, recarga/teste/manutenção vencidos ou sem registro, inspeção atrasada e equipamento não conforme.
 - **Equipamento retirado é baixado pela gestão, com motivo:** o histórico de inspeções e manutenções continua guardado. Cada inspeção registra onde o equipamento estava naquele dia.
 
+### Relatórios e painel de conformidade
+- **Painel de conformidade (semáforo)** por filial e por módulo (treinamentos, ASOs, ordens de serviço e PPCI):
+  - vermelho: algo vencido, faltando ou sem registro;
+  - amarelo: só itens vencendo ou para conferir;
+  - verde: tudo em dia;
+  - cinza: nada a verificar.
+
+  Cada módulo mostra quantos itens foram verificados e o percentual em dia.
+- **"Como estava em uma data":** `?data_base=AAAA-MM-DD` no painel, nas pendências e nos relatórios.
+  - Cada documento vale pela data do fato (realização, exame, ciência, aprovação, serviço, inspeção).
+  - Quem estava em cada filial e função sai do histórico de lotações.
+  - As exigências de treinamento por função e o local de cada equipamento também têm histórico.
+  - Registro anulado não conta. Documento lançado depois da data-base aparece marcado com `*`.
+- **Relatórios em PDF e Excel**, nas pendências de cada módulo e no painel:
+  - o cabeçalho traz a data-base, quem emitiu e o código de verificação com QR;
+  - cada emissão fica registrada com o SHA-256 do conteúdo e do arquivo;
+  - a verificação pública mostra só o resumo (contagens), nunca a lista de pessoas.
+
 ### Estrutura e controle
 - **Estrutura multi-filial:** matriz → filiais (cada uma com CNPJ próprio, UF, cidade e bairro) → prédios e setores. Funções num catálogo único do grupo.
 - **Permissões por perfil e por filial:**
@@ -152,10 +170,7 @@ O modelo completo está sendo desenhado junto com a rotina real de um SESMT com 
 4. ~~**ASOs (PCMSO):** controle de vencimentos, com acesso restrito aos dados de saúde (LGPD)~~ ✅ concluída
 5. ~~**PGR e ordens de serviço:** inventário de riscos por filial e OS com ciência pelo crachá~~ ✅ concluída
 6. ~~**PPCI por prédio:** projeto aprovado, alvará, projeto x instalado, manutenção de extintores e inspeção mensal por QR~~ ✅ concluída
-7. **Relatórios em todas as áreas:**
-   - exportação em PDF e Excel, com código de verificação;
-   - consulta da situação "como estava em uma data";
-   - painel de conformidade.
+7. ~~**Relatórios:** PDF e Excel com código de verificação, situação "como estava em uma data" e painel de conformidade~~ ✅ concluída
 8. **Encadeamento por hash e fechamento mensal:** reforça a prova de que nada foi alterado. A correção por estorno já está pronta.
 
 ## Tecnologias
@@ -164,6 +179,7 @@ O modelo completo está sendo desenhado junto com a rotina real de um SESMT com 
 - **PostgreSQL** + **Knex** (migrations)
 - **JWT** (`jsonwebtoken`) e **bcrypt** (`bcryptjs`) para autenticação
 - **qrcode** para gerar os QR codes e **html5-qrcode** para a leitura pela câmera
+- **pdfkit** e **exceljs** para os PDFs e planilhas
 - **Testes:** `node:test` + **embedded-postgres**, que roda os testes num PostgreSQL real e temporário, sem depender do banco online
 
 ## Como rodar
@@ -188,7 +204,7 @@ npm test
 O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 - sobe um banco temporário;
 - roda as migrations;
-- testa permissões, filtragem por filial, lotação, auditoria, entregas, estoque, treinamentos, ASOs, PGR, ordens de serviço e PPCI;
+- testa permissões, filtragem por filial, lotação, auditoria, entregas, estoque, treinamentos, ASOs, PGR, ordens de serviço, PPCI e relatórios;
 - apaga tudo no fim.
 
 ## Principais rotas
@@ -214,7 +230,10 @@ O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 | POST | `/entregas/qr` | Entrega por QR + PIN (+ foto), baixa PEPS |
 | POST | `/entregas` | Entrega manual com justificativa (gestão) |
 | POST | `/entregas/:id/estorno` | Estorno de entrega (gestão) |
-| GET | `/verificar/:codigo` | Verificação pública de entrega, presença, certificado, ciência de OS ou inspeção de incêndio |
+| GET | `/verificar/:codigo` | Verificação pública de entrega, presença, certificado, ciência de OS, inspeção de incêndio ou relatório |
+| GET | `/painel/conformidade` | Semáforo por filial e módulo (`?filial_id=&data_base=`) |
+| GET | `/relatorios/:tipo` | PDF ou Excel (`?formato=pdf\|xlsx&data_base=&todas=true`): `conformidade`, `treinamentos`, `asos`, `ordens_servico`, `ppci` |
+| GET | `/relatorios-emitidos` | Relatórios emitidos nas filiais do usuário, com código e SHA-256 |
 | GET/POST/PUT | `/treinamentos` | Catálogo de treinamentos (matriz) |
 | GET/PUT | `/funcoes/:id/treinamentos` | Treinamentos exigidos pela função (matriz) |
 | GET | `/treinamentos/pendencias` | Faltando, vencidos e vencendo por filial/setor/funcionário |

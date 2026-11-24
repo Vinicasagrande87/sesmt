@@ -8,7 +8,8 @@ const { hoje, dataValida, somarMeses } = require('../utils/datas');
 const { exigirCampos, idValido } = require('../utils/validacao');
 const { salvarArquivo } = require('../utils/arquivos');
 const { gerarCodigo } = require('../utils/codigo');
-const { situacaoDosFuncionarios, SITUACOES } = require('../services/treinamentos');
+const { situacaoTreinamentos, SITUACOES } = require('../services/treinamentos');
+const { lerDataBase, lerDias, filtrarPendencias } = require('../services/historico');
 const { buscarNoEscopo } = require('./FuncionarioController');
 const { gerarCertificado } = require('../relatorios/certificado');
 
@@ -124,29 +125,14 @@ module.exports = {
 
   // GET /treinamentos/pendencias?filial_id=&setor_id=&situacao=vencido&dias=30
   // Por padrão lista só o que precisa de ação (faltando, vencido, vencendo).
+  // ?data_base=AAAA-MM-DD: como estava naquela data
   async pendencias(req, res) {
-    const dias = req.query.dias !== undefined ? Number(req.query.dias) : 30;
-    if (!Number.isInteger(dias) || dias < 0 || dias > 365) throw new ErroDeNegocio(400, 'dias deve ser um inteiro entre 0 e 365');
+    const dias = lerDias(req.query, 'dias', 30);
+    const { dataBase } = lerDataBase(req.query);
     if (req.query.situacao && !SITUACOES.includes(req.query.situacao)) {
       throw new ErroDeNegocio(400, `situacao deve ser: ${SITUACOES.join(', ')}`);
     }
-
-    const query = noEscopo(knex('funcionarios as f'), req, 'f.filial_id')
-      .join('filiais as fi', 'fi.id', 'f.filial_id')
-      .leftJoin('setores as s', 's.id', 'f.setor_id')
-      .leftJoin('funcoes as fn', 'fn.id', 'f.funcao_id')
-      .where('f.status', 'Ativo')
-      .whereNotNull('f.funcao_id')
-      .select('f.id', 'f.nome', 'f.matricula', 'f.funcao_id', 'fn.nome as funcao', 'f.filial_id', 'fi.nome as filial', 's.nome as setor');
-    if (req.query.filial_id) query.where('f.filial_id', req.query.filial_id);
-    if (req.query.setor_id) query.where('f.setor_id', req.query.setor_id);
-    if (req.query.funcionario_id) query.where('f.id', req.query.funcionario_id);
-
-    let linhas = await situacaoDosFuncionarios(knex, await query, { dias });
-    if (req.query.situacao) linhas = linhas.filter((l) => l.situacao === req.query.situacao);
-    else if (req.query.todas !== 'true') linhas = linhas.filter((l) => l.situacao !== 'em_dia');
-
-    const resumo = Object.fromEntries(SITUACOES.map((s) => [s, linhas.filter((l) => l.situacao === s).length]));
-    return res.json({ resumo, itens: linhas });
+    const linhas = await situacaoTreinamentos(knex, req, req.query, { dias, dataBase });
+    return res.json({ data_base: dataBase || hoje(), ...filtrarPendencias(linhas, SITUACOES, req.query) });
   }
 };

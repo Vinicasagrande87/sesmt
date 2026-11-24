@@ -204,11 +204,19 @@ async function conteudoDaOS(trx, pgr, grupoId) {
 
 const hashDoConteudo = (conteudo) => crypto.createHash('sha256').update(JSON.stringify(conteudo)).digest('hex');
 
-// OS que vale hoje para o funcionário: PGR vigente da filial + grupo do setor/função atuais
-async function osVigenteDoFuncionario(trx, funcionario) {
-  const pgr = await trx('pgrs as p').join('pgr_filiais as pf', 'pf.pgr_id', 'p.id')
-    .where({ 'pf.filial_id': funcionario.filial_id, 'p.status': 'vigente' })
-    .orderBy('p.publicado_em', 'desc').first('p.*');
+// OS que vale para o funcionário: PGR vigente da filial + grupo do setor/função.
+// Com corte (instante): o PGR que estava publicado e ainda não substituído naquele instante.
+async function osVigenteDoFuncionario(trx, funcionario, { corte = null } = {}) {
+  const q = trx('pgrs as p').join('pgr_filiais as pf', 'pf.pgr_id', 'p.id')
+    .where('pf.filial_id', funcionario.filial_id)
+    .orderBy('p.publicado_em', 'desc');
+  if (corte) {
+    q.whereNotNull('p.publicado_em').where('p.publicado_em', '<', corte)
+      .andWhere((w) => w.whereNull('p.substituido_em').orWhere('p.substituido_em', '>=', corte));
+  } else {
+    q.where('p.status', 'vigente');
+  }
+  const pgr = await q.first('p.*');
   if (!pgr) return { situacao: 'sem_pgr' };
   const os = await trx('pgr_grupo_funcoes as gf')
     .join('ordens_servico as os', 'os.grupo_id', 'gf.grupo_id')

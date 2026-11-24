@@ -25,6 +25,7 @@ const PgrController = require('./controllers/PgrController');
 const OrdemServicoController = require('./controllers/OrdemServicoController');
 const PpciController = require('./controllers/PpciController');
 const EquipamentoIncendioController = require('./controllers/EquipamentoIncendioController');
+const RelatorioController = require('./controllers/RelatorioController');
 const { autenticar, permitir } = require('./middlewares/auth');
 
 // Quem pode o quê (o filtro por filial é feito dentro de cada controller)
@@ -194,6 +195,11 @@ routes.post('/equipamentos-incendio/:id/inspecoes', operacao, EquipamentoIncendi
 routes.post('/equipamentos-incendio/:id/manutencoes', operacao, EquipamentoIncendioController.manutencao);
 routes.post('/equipamento-manutencoes/:id/anular', gestao, EquipamentoIncendioController.anularManutencao);
 routes.post('/equipamento-inspecoes/:id/anular', gestao, EquipamentoIncendioController.anularInspecao);
+
+// Painel de conformidade e relatórios (PDF/Excel com código de verificação; ?data_base= para "como estava")
+routes.get('/painel/conformidade', RelatorioController.painel);
+routes.get('/relatorios-emitidos', RelatorioController.emitidos);
+routes.get('/relatorios/:tipo', RelatorioController.emitir);
 
 // Acidentes
 routes.get('/acidentes', AcidenteController.index);

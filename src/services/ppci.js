@@ -1,6 +1,7 @@
 // Regras do PPCI por prédio: tipos de equipamento, periodicidades, checklist da inspeção mensal,
 // situação do alvará, situação de cada equipamento e comparação "projeto aprovado x instalado".
-const { hoje: hojeBR, somarDias, paraISO, dataLocal } = require('../utils/datas');
+const { hoje: hojeBR, somarDias, paraISO, dataLocal, fimDoDia } = require('../utils/datas');
+const { noEscopo } = require('../utils/escopo');
 
 const AGENTES = {
   agua: 'Água pressurizada',
@@ -122,43 +123,68 @@ function situacaoDoAlvara(alvara, { hoje = hojeBR(), dias = DIAS_ALVARA } = {}) 
   return 'vigente';
 }
 
-// Último registro não anulado por chave (ex.: PPCI mais recente de cada prédio)
-async function ultimosVigentes(db, { tabela, anulacoes, fk, chave, ids, ordem }) {
+// Último registro não anulado por chave (ex.: PPCI mais recente de cada prédio); com dataBase, só até a data
+async function ultimosVigentes(db, { tabela, anulacoes, fk, chave, ids, ordem, dataBase = null }) {
   if (!ids.length) return new Map();
-  const linhas = await db(`${tabela} as t`)
+  const q = db(`${tabela} as t`)
     .leftJoin(`${anulacoes} as n`, `n.${fk}`, 't.id')
     .whereNull('n.id')
     .whereIn(`t.${chave}`, ids)
     .distinctOn(`t.${chave}`)
     .orderBy([{ column: `t.${chave}` }, ...ordem.map((c) => ({ column: `t.${c}`, order: 'desc' })), { column: 't.id', order: 'desc' }])
     .select('t.*');
+  if (dataBase) q.where(`t.${ordem[0]}`, '<=', dataBase);
+  const linhas = await q;
   return new Map(linhas.map((l) => [l[chave], l]));
 }
 
-const ppcisVigentes = (db, predioIds) => ultimosVigentes(db, {
-  tabela: 'ppcis', anulacoes: 'ppci_anulacoes', fk: 'ppci_id', chave: 'predio_id', ids: predioIds, ordem: ['data_aprovacao']
+const ppcisVigentes = (db, predioIds, { dataBase } = {}) => ultimosVigentes(db, {
+  tabela: 'ppcis', anulacoes: 'ppci_anulacoes', fk: 'ppci_id', chave: 'predio_id', ids: predioIds, ordem: ['data_aprovacao'], dataBase
 });
-const alvarasVigentes = (db, predioIds) => ultimosVigentes(db, {
-  tabela: 'alvaras', anulacoes: 'alvara_anulacoes', fk: 'alvara_id', chave: 'predio_id', ids: predioIds, ordem: ['data_emissao', 'data_validade']
+const alvarasVigentes = (db, predioIds, { dataBase } = {}) => ultimosVigentes(db, {
+  tabela: 'alvaras', anulacoes: 'alvara_anulacoes', fk: 'alvara_id', chave: 'predio_id', ids: predioIds, ordem: ['data_emissao', 'data_validade'], dataBase
 });
+
+// Equipamentos ativos nos prédios (hoje, ou onde estavam e se estavam ativos no fim do dia da data-base)
+async function equipamentosDosPredios(db, predioIds, { dataBase = null } = {}) {
+  if (!predioIds.length) return [];
+  if (!dataBase) {
+    return db('equipamentos_incendio').whereIn('predio_id', predioIds).where('ativo', true).orderBy('identificacao');
+  }
+  const naData = db('equipamento_historico as h')
+    .where('h.inicio', '<', fimDoDia(dataBase))
+    .distinctOn('h.equipamento_id')
+    .orderBy([{ column: 'h.equipamento_id' }, { column: 'h.inicio', order: 'desc' }, { column: 'h.id', order: 'desc' }])
+    .select('h.equipamento_id', 'h.predio_id', 'h.ativo');
+  const linhas = await db.from(naData.as('h')).join('equipamentos_incendio as e', 'e.id', 'h.equipamento_id')
+    .whereIn('h.predio_id', predioIds).where('h.ativo', true)
+    .orderBy('e.identificacao').select('e.*', 'h.predio_id as predio_na_data');
+  return linhas.map(({ predio_na_data, ...e }) => ({ ...e, predio_id: predio_na_data, ativo: true }));
+}
 
 // Situação de cada equipamento: manutenções por tipo e última inspeção. Devolve os equipamentos com
 // { manutencoes: { recarga: {...} }, inspecao: {...}, pendencias: ['recarga_vencida', ...] }
-async function situacaoDosEquipamentos(db, equipamentos, { hoje = hojeBR(), dias = DIAS_EQUIPAMENTO } = {}) {
+// Com dataBase: só serviços e inspeções até aquela data, e prazos contados a partir dela.
+async function situacaoDosEquipamentos(db, equipamentos, { hoje = hojeBR(), dias = DIAS_EQUIPAMENTO, dataBase = null } = {}) {
   const ids = equipamentos.map((e) => e.id);
   if (!ids.length) return [];
-  const manutencoes = await db('equipamento_manutencoes as m')
+  if (dataBase) hoje = dataBase;
+  const qManut = db('equipamento_manutencoes as m')
     .leftJoin('manutencao_anulacoes as n', 'n.manutencao_id', 'm.id')
     .whereNull('n.id').whereIn('m.equipamento_id', ids)
     .distinctOn('m.equipamento_id', 'm.tipo')
     .orderBy([{ column: 'm.equipamento_id' }, { column: 'm.tipo' }, { column: 'm.data_servico', order: 'desc' }, { column: 'm.id', order: 'desc' }])
     .select('m.id', 'm.equipamento_id', 'm.tipo', 'm.data_servico', 'm.data_proxima', 'm.empresa', 'm.numero_selo');
-  const inspecoes = await db('equipamento_inspecoes as i')
+  if (dataBase) qManut.where('m.data_servico', '<=', dataBase);
+  const manutencoes = await qManut;
+  const qInsp = db('equipamento_inspecoes as i')
     .leftJoin('inspecao_anulacoes as n', 'n.inspecao_id', 'i.id')
     .whereNull('n.id').whereIn('i.equipamento_id', ids)
     .distinctOn('i.equipamento_id')
     .orderBy([{ column: 'i.equipamento_id' }, { column: 'i.data_hora', order: 'desc' }, { column: 'i.id', order: 'desc' }])
     .select('i.id', 'i.equipamento_id', 'i.data_hora', 'i.conforme', 'i.itens', 'i.observacao', 'i.codigo_verificacao');
+  if (dataBase) qInsp.where('i.data_hora', '<', fimDoDia(dataBase));
+  const inspecoes = await qInsp;
 
   const limite = somarDias(hoje, dias);
   return equipamentos.map((eq) => {
@@ -231,8 +257,64 @@ function compararProjeto(medidas, equipamentosAtivos) {
   return linhas;
 }
 
+// Painel de um prédio: PPCI e alvará que valem (hoje ou na data-base), comparação e equipamentos com a situação
+async function painelDoPredio(db, predio, { dias = DIAS_EQUIPAMENTO, diasAlvara = DIAS_ALVARA, dataBase = null } = {}) {
+  const ppci = (await ppcisVigentes(db, [predio.id], { dataBase })).get(predio.id) || null;
+  const alvara = (await alvarasVigentes(db, [predio.id], { dataBase })).get(predio.id) || null;
+  const medidas = ppci ? await db('ppci_medidas').where({ ppci_id: ppci.id }).orderBy('id') : [];
+  const equipamentos = await equipamentosDosPredios(db, [predio.id], { dataBase });
+  const situacao = await situacaoDosEquipamentos(db, equipamentos, { dias, dataBase });
+  const comparacao = ppci ? compararProjeto(medidas, equipamentos) : [];
+  return {
+    ppci: ppci && { ...ppci, data_aprovacao: paraISO(ppci.data_aprovacao), medidas },
+    alvara: alvara && { ...alvara, data_emissao: paraISO(alvara.data_emissao), data_validade: paraISO(alvara.data_validade) },
+    situacao_alvara: situacaoDoAlvara(alvara, { dias: diasAlvara, ...(dataBase ? { hoje: dataBase } : {}) }),
+    comparacao,
+    equipamentos: situacao
+  };
+}
+
+// Pendências de PPCI dos prédios ativos (filtros: filial_id, predio_id). Devolve os itens e as
+// unidades verificadas (prédios e equipamentos), para o percentual de conformidade.
+async function situacaoPpci(db, req, filtros = {}, { dias = DIAS_EQUIPAMENTO, diasAlvara = DIAS_ALVARA, dataBase = null } = {}) {
+  const q = noEscopo(db('predios as p'), req, 'p.filial_id').join('filiais as f', 'f.id', 'p.filial_id')
+    .where('p.ativo', true).select('p.*', 'f.nome as filial').orderBy(['f.nome', 'p.nome']);
+  if (filtros.filial_id) q.where('p.filial_id', filtros.filial_id);
+  if (filtros.predio_id) q.where('p.id', filtros.predio_id);
+  if (dataBase) q.where('p.created_at', '<', fimDoDia(dataBase));
+  const predios = await q;
+
+  const itens = [];
+  const unidades = []; // o que foi verificado: cada prédio e cada equipamento (base do percentual de conformidade)
+  for (const predio of predios) {
+    const pn = await painelDoPredio(db, predio, { dias, diasAlvara, dataBase });
+    unidades.push({ filial_id: predio.filial_id, chave: `p${predio.id}` }, ...pn.equipamentos.map((e) => ({ filial_id: predio.filial_id, chave: `e${e.id}` })));
+    const base = { filial_id: predio.filial_id, filial: predio.filial, predio_id: predio.id, predio: predio.nome };
+    if (!pn.ppci) itens.push({ ...base, nivel: 'predio', situacao: 'sem_ppci' });
+    if (pn.situacao_alvara !== 'vigente') {
+      itens.push({ ...base, nivel: 'predio', situacao: pn.situacao_alvara === 'sem_alvara' ? 'sem_alvara' : `alvara_${pn.situacao_alvara}`,
+        data_validade: pn.alvara ? pn.alvara.data_validade : null });
+    }
+    const faltando = pn.comparacao.filter((c) => c.situacao === 'faltando');
+    if (faltando.length) {
+      itens.push({ ...base, nivel: 'predio', situacao: 'divergencia_projeto',
+        detalhe: faltando.map((c) => ({ tipo: c.tipo, agente: c.agente, previsto: c.previsto, instalado: c.instalado })) });
+    }
+    for (const eq of pn.equipamentos) {
+      for (const situacao of eq.pendencias) {
+        const manut = eq.manutencoes[situacao.replace(/_(vencida|vencendo|nao_registrada)$/, '')];
+        itens.push({ ...base, nivel: 'equipamento', situacao, equipamento_id: eq.id, identificacao: eq.identificacao, tipo: eq.tipo,
+          agente: eq.agente, localizacao: eq.localizacao,
+          data_limite: situacao.startsWith('inspecao') ? (eq.inspecao ? eq.inspecao.proxima : null) : (manut ? manut.data_proxima : null),
+          ...(situacao === 'nao_conforme' ? { nao_conformes: eq.inspecao.nao_conformes, observacao: eq.inspecao.observacao } : {}) });
+      }
+    }
+  }
+  return { itens, unidades };
+}
+
 module.exports = {
   AGENTES, EQUIPAMENTOS, OUTRAS_MEDIDAS, TIPOS_MEDIDA, MANUTENCOES, INSPECAO_DIAS, DIAS_EQUIPAMENTO, DIAS_ALVARA,
   SITUACOES_EQUIPAMENTO, SITUACOES_PREDIO, nomeDaMedida, situacaoDoAlvara, ppcisVigentes, alvarasVigentes,
-  situacaoDosEquipamentos, compararProjeto
+  equipamentosDosPredios, situacaoDosEquipamentos, compararProjeto, painelDoPredio, situacaoPpci
 };
