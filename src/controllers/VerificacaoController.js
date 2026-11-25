@@ -194,12 +194,23 @@ async function permissaoTrabalho(codigo) {
   };
 }
 
+async function presencaDds(codigo) {
+  const p = await knex('dds_presencas as p').join('dds as d', 'd.id', 'p.dds_id').join('funcionarios as f', 'f.id', 'p.funcionario_id')
+    .join('filiais as fi', 'fi.id', 'd.filial_id').leftJoin('dds_presenca_anulacoes as n', 'n.presenca_id', 'p.id')
+    .where('p.codigo_verificacao', codigo).first('p.assinado_em', 'p.metodo', 'd.data', 'd.tema', 'fi.nome as filial', 'f.nome as funcionario', 'n.created_at as anulada_em');
+  if (!p) return null;
+  return {
+    tipo: 'presenca_dds', data_hora: p.assinado_em, data: p.data, tema: p.tema, filial: p.filial, funcionario: iniciais(p.funcionario),
+    assinatura: p.metodo === 'qr_pin' ? 'Crachá QR + PIN pessoal' : 'Registro manual (lista em papel)', anulada: !!p.anulada_em
+  };
+}
+
 module.exports = {
   async verificar(req, res) {
     const codigo = String(req.params.codigo || '').toUpperCase();
     if (!/^[A-Z0-9]{8}$/.test(codigo)) return res.status(404).json({ valida: false });
     const achado = (await entrega(codigo)) || (await presenca(codigo)) || (await certificado(codigo)) || (await cienciaOs(codigo)) ||
-      (await inspecaoIncendio(codigo)) || (await relatorio(codigo)) || (await fechamento(codigo)) || (await permissaoTrabalho(codigo));
+      (await inspecaoIncendio(codigo)) || (await relatorio(codigo)) || (await fechamento(codigo)) || (await permissaoTrabalho(codigo)) || (await presencaDds(codigo));
     if (!achado) return res.status(404).json({ valida: false });
     return res.json({ valida: true, codigo, ...achado });
   }

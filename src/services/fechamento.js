@@ -50,6 +50,8 @@ const FONTES = {
   cipa_reuniao_anulacoes: { quando: 'created_at', filial: '(select m.filial_id from cipa_reunioes r join cipa_mandatos m on m.id = r.mandato_id where r.id = t.reuniao_id)' },
   cipa_candidatos: { quando: 'created_at', filial: '(select m.filial_id from cipa_eleicoes e join cipa_mandatos m on m.id = e.mandato_id where e.id = t.eleicao_id)' },
   cipa_votos: { quando: 'created_at', filial: '(select m.filial_id from cipa_candidatos c join cipa_eleicoes e on e.id = c.eleicao_id join cipa_mandatos m on m.id = e.mandato_id where c.id = t.candidato_id)' },
+  dds_presencas: { quando: 'assinado_em', filial: '(select d.filial_id from dds d where d.id = t.dds_id)' },
+  dds_presenca_anulacoes: { quando: 'created_at', filial: '(select d.filial_id from dds_presencas p join dds d on d.id = p.dds_id where p.id = t.presenca_id)' },
   // Documento de terceirizada vale para as filiais onde a empresa já tinha contrato quando ele foi lançado
   // (contrato aberto depois não muda o fechamento de um mês passado)
   terceiro_documentos: { quando: 'created_at', filiais: 'select c.filial_id from terceiro_contratos c where c.empresa_id = t.empresa_id and c.created_at <= t.created_at' },

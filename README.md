@@ -264,6 +264,21 @@ A ideia é usar o conhecimento técnico da área para construir uma ferramenta q
   - quem sai da empresa sai também da CIPA.
 - **Pendências:** grau de risco não informado, filial sem CIPA ou sem designado, composição incompleta, membro sem o treinamento da NR-5, reunião mensal atrasada e edital da próxima eleição chegando ou atrasado. Também entram no semáforo, no relatório e nos avisos semanais.
 
+### DDS (diálogo diário de segurança)
+- **Banco de temas** com roteiro de apoio e NR de referência. O tema também pode ser livre. O DDS guarda o título usado no dia.
+- **Registro do DDS** por filial e setor (ou da filial inteira), com local, condutor e duração.
+- **Presença:**
+  - pelo **crachá + PIN** no dia, na página de celular `/dds.html`, com código de verificação público por presença;
+  - em papel, lançada pela gestão com justificativa;
+  - presença errada se anula, e as presenças só aceitam inclusão.
+- **Encerramento** com o resumo do que foi falado. DDS sem presença se cancela, não se encerra.
+- **Metas de frequência** por setor ou pela filial: diária (dias úteis), semanal, quinzenal ou mensal.
+  - O DDS da filial inteira conta para todos os setores.
+  - Setor sem empregados não é cobrado.
+  - A pendência mostra o último DDS, até quando deve haver o próximo e a participação dos últimos 30 dias.
+- **Indicadores do mês:** DDS realizados, minutos, participação por filial e setor e quem não participou.
+- **Lista de presença em PDF.** Também entra no semáforo, no relatório e no fechamento mensal.
+
 ### Estrutura e controle
 - **Estrutura multi-filial:** matriz → filiais (cada uma com CNPJ próprio, UF, cidade e bairro) → prédios e setores. Funções num catálogo único do grupo.
 - **Permissões por perfil e por filial:**
@@ -347,7 +362,7 @@ npm test
 O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 - sobe um banco temporário;
 - roda as migrations;
-- testa permissões, filtragem por filial, lotação, auditoria, entregas, estoque, treinamentos, ASOs, PGR, ordens de serviço, PPCI, relatórios, integridade (travas do banco, cadeia de hash e fechamento mensal), contas, avisos por e-mail ocorrências (CAT, investigação e indicadores), plano de ação, permissão de trabalho, terceirizadas e CIPA;
+- testa permissões, filtragem por filial, lotação, auditoria, entregas, estoque, treinamentos, ASOs, PGR, ordens de serviço, PPCI, relatórios, integridade (travas do banco, cadeia de hash e fechamento mensal), contas, avisos por e-mail ocorrências (CAT, investigação e indicadores), plano de ação, permissão de trabalho, terceirizadas, CIPA e DDS;
 - apaga tudo no fim.
 
 ## Principais rotas
@@ -381,7 +396,7 @@ O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 | POST | `/entregas/:id/estorno` | Estorno de entrega (gestão) |
 | GET | `/verificar/:codigo` | Verificação pública de entrega, presença, certificado, ciência de OS, inspeção de incêndio, relatório, fechamento ou permissão de trabalho |
 | GET | `/painel/conformidade` | Semáforo por filial e módulo (`?filial_id=&data_base=`) |
-| GET | `/relatorios/:tipo` | PDF ou Excel (`?formato=pdf\|xlsx&data_base=&todas=true`): `conformidade`, `treinamentos`, `asos`, `ordens_servico`, `ppci`, `ocorrencias`, `acoes`, `permissoes`, `terceiros`, `cipa` |
+| GET | `/relatorios/:tipo` | PDF ou Excel (`?formato=pdf\|xlsx&data_base=&todas=true`): `conformidade`, `treinamentos`, `asos`, `ordens_servico`, `ppci`, `ocorrencias`, `acoes`, `permissoes`, `terceiros`, `cipa`, `dds` |
 | GET | `/relatorios-emitidos` | Relatórios emitidos nas filiais do usuário, com código e SHA-256 |
 | GET/POST | `/fechamentos` | Fechamento mensal da filial (POST pela gestão); `?filial_id=` lista também os meses em aberto |
 | GET | `/fechamentos/:id`, `/fechamentos/:id/conferencia` | Situação congelada / conferência do que mudou desde o fechamento |
@@ -461,6 +476,11 @@ O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 | POST | `/cipa/mandatos/:id/eleicao`, `/cipa/eleicoes/:id/candidatos`, `/cipa/eleicoes/:id/apuracao` | Eleição: prazos, inscrição e apuração |
 | POST | `/cipa/mandatos/:id/reunioes` | Reunião com pauta, ata e presentes (+ `/cipa-reunioes/:id/anular`) |
 | GET | `/cipa/pendencias`, `/cipa/estabilidades` | Pendências da NR-5 / quem tem estabilidade provisória |
+| GET/POST/PUT | `/dds/temas` | Banco de temas do DDS |
+| GET/POST | `/dds` | DDS por filial/setor (`?hoje=true`) (+ `/:id/pdf`, `/:id/encerrar`, `/:id/cancelar`) |
+| POST | `/dds/:id/presencas`, `/dds/:id/presencas/manual` | Presença pelo crachá + PIN no dia / manual pela gestão |
+| GET/PUT | `/dds/metas` | Meta de frequência por setor ou filial |
+| GET | `/dds/pendencias`, `/dds/indicadores` | Metas atrasadas / participação do mês |
 
 Todas as rotas, exceto `/ping` e `/auth/login`, exigem o cabeçalho `Authorization: Bearer <token>`.
 

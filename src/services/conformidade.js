@@ -10,6 +10,7 @@ const { situacaoAcoes } = require('./acoes');
 const { situacaoPermissoes } = require('./permissoes');
 const { situacaoTerceiros } = require('./terceiros');
 const { situacaoCipa } = require('./cipa');
+const { situacaoDds } = require('./dds');
 
 const ORDEM_COR = ['cinza', 'verde', 'amarelo', 'vermelho'];
 const pior = (a, b) => (ORDEM_COR.indexOf(a) >= ORDEM_COR.indexOf(b) ? a : b);
@@ -98,6 +99,16 @@ const MODULOS = {
     },
     chave: (i) => `${i.situacao === 'em_dia' ? 'ok' : i.situacao}:${i.membro_id || ''}`,
     gravidade: (i) => (i.situacao === 'em_dia' ? null : ['edital_proximo', 'grau_risco_nao_informado'].includes(i.situacao) ? 'amarelo' : 'vermelho')
+  },
+  // DDS: cada meta de frequência (filial ou setor); sem DDS dentro da meta = vermelho
+  dds: {
+    nome: 'DDS',
+    async calcular(db, req, filtros, o) {
+      const itens = await situacaoDds(db, req, filtros, { dataBase: o.dataBase });
+      return { itens, unidades: itens.map((i) => ({ filial_id: i.filial_id, chave: `m${i.meta_id}` })) };
+    },
+    chave: (i) => `m${i.meta_id}`,
+    gravidade: (i) => (i.situacao === 'em_dia' ? null : 'vermelho')
   }
 };
 

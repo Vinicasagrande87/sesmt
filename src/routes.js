@@ -17,6 +17,7 @@ const AcaoController = require('./controllers/AcaoController');
 const PermissaoTrabalhoController = require('./controllers/PermissaoTrabalhoController');
 const TerceiroController = require('./controllers/TerceiroController');
 const CipaController = require('./controllers/CipaController');
+const DdsController = require('./controllers/DdsController');
 const TreinamentoController = require('./controllers/TreinamentoController');
 const CertificadoController = require('./controllers/CertificadoController');
 const AuthController = require('./controllers/AuthController');
@@ -309,6 +310,24 @@ routes.post('/cipa-membros/:id/saida', gestao, CipaController.saidaMembro);
 routes.post('/cipa/eleicoes/:id/candidatos', operacao, CipaController.inscreverCandidato);
 routes.post('/cipa/eleicoes/:id/apuracao', gestao, CipaController.apurar);
 routes.post('/cipa-reunioes/:id/anular', gestao, CipaController.anularReuniao);
+
+// DDS (diálogo diário de segurança): temas, registro, presença pelo crachá, metas e indicadores
+routes.get('/dds/temas', DdsController.temas);
+routes.post('/dds/temas', operacao, DdsController.criarTema);
+routes.put('/dds/temas/:id', operacao, DdsController.alterarTema);
+routes.get('/dds/metas', DdsController.metas);
+routes.put('/dds/metas', gestao, DdsController.definirMeta);
+routes.get('/dds/pendencias', DdsController.pendencias);
+routes.get('/dds/indicadores', DdsController.indicadores);
+routes.get('/dds', DdsController.index);
+routes.post('/dds', operacao, DdsController.create);
+routes.get('/dds/:id', DdsController.show);
+routes.get('/dds/:id/pdf', DdsController.pdf);
+routes.post('/dds/:id/presencas', operacao, DdsController.presencaQr);
+routes.post('/dds/:id/presencas/manual', gestao, DdsController.presencaManual);
+routes.post('/dds/:id/encerrar', operacao, DdsController.encerrar);
+routes.post('/dds/:id/cancelar', gestao, DdsController.cancelar);
+routes.post('/dds-presencas/:id/anular', gestao, DdsController.anularPresenca);
 
 routes.get('/horas-trabalhadas', OcorrenciaController.horas);
 routes.put('/horas-trabalhadas', gestao, OcorrenciaController.definirHoras);
