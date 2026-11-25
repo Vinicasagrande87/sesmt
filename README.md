@@ -265,6 +265,7 @@ A ideia é usar o conhecimento técnico da área para construir uma ferramenta q
 - **Pendências:** grau de risco não informado, filial sem CIPA ou sem designado, composição incompleta, membro sem o treinamento da NR-5, reunião mensal atrasada e edital da próxima eleição chegando ou atrasado. Também entram no semáforo, no relatório e nos avisos semanais.
 
 ### DDS (diálogo diário de segurança)
+É feito conforme a necessidade e a disponibilidade, sem data marcada nem obrigatoriedade. Por isso **não entra no semáforo de conformidade**: o sistema registra e comprova.
 - **Banco de temas** com roteiro de apoio e NR de referência. O tema também pode ser livre. O DDS guarda o título usado no dia.
 - **Registro do DDS** por filial e setor (ou da filial inteira), com local, condutor e duração.
 - **Presença:**
@@ -272,12 +273,11 @@ A ideia é usar o conhecimento técnico da área para construir uma ferramenta q
   - em papel, lançada pela gestão com justificativa;
   - presença errada se anula, e as presenças só aceitam inclusão.
 - **Encerramento** com o resumo do que foi falado. DDS sem presença se cancela, não se encerra.
-- **Metas de frequência** por setor ou pela filial: diária (dias úteis), semanal, quinzenal ou mensal.
-  - O DDS da filial inteira conta para todos os setores.
-  - Setor sem empregados não é cobrado.
-  - A pendência mostra o último DDS, até quando deve haver o próximo e a participação dos últimos 30 dias.
 - **Indicadores do mês:** DDS realizados, minutos, participação por filial e setor e quem não participou.
-- **Lista de presença em PDF.** Também entra no semáforo, no relatório e no fechamento mensal.
+- **Meta de frequência opcional**, por setor ou pela filial (diária, semanal, quinzenal ou mensal).
+  - Sem meta cadastrada, nada é cobrado.
+  - Com meta, a consulta mostra o último DDS e até quando deve haver o próximo, e o DDS da filial inteira conta para todos os setores.
+- **Lista de presença em PDF.** As presenças entram no fechamento mensal.
 
 ### Estrutura e controle
 - **Estrutura multi-filial:** matriz → filiais (cada uma com CNPJ próprio, UF, cidade e bairro) → prédios e setores. Funções num catálogo único do grupo.
@@ -396,7 +396,7 @@ O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 | POST | `/entregas/:id/estorno` | Estorno de entrega (gestão) |
 | GET | `/verificar/:codigo` | Verificação pública de entrega, presença, certificado, ciência de OS, inspeção de incêndio, relatório, fechamento ou permissão de trabalho |
 | GET | `/painel/conformidade` | Semáforo por filial e módulo (`?filial_id=&data_base=`) |
-| GET | `/relatorios/:tipo` | PDF ou Excel (`?formato=pdf\|xlsx&data_base=&todas=true`): `conformidade`, `treinamentos`, `asos`, `ordens_servico`, `ppci`, `ocorrencias`, `acoes`, `permissoes`, `terceiros`, `cipa`, `dds` |
+| GET | `/relatorios/:tipo` | PDF ou Excel (`?formato=pdf\|xlsx&data_base=&todas=true`): `conformidade`, `treinamentos`, `asos`, `ordens_servico`, `ppci`, `ocorrencias`, `acoes`, `permissoes`, `terceiros`, `cipa` |
 | GET | `/relatorios-emitidos` | Relatórios emitidos nas filiais do usuário, com código e SHA-256 |
 | GET/POST | `/fechamentos` | Fechamento mensal da filial (POST pela gestão); `?filial_id=` lista também os meses em aberto |
 | GET | `/fechamentos/:id`, `/fechamentos/:id/conferencia` | Situação congelada / conferência do que mudou desde o fechamento |
@@ -479,8 +479,8 @@ O primeiro `npm test` baixa o PostgreSQL embutido. Cada execução:
 | GET/POST/PUT | `/dds/temas` | Banco de temas do DDS |
 | GET/POST | `/dds` | DDS por filial/setor (`?hoje=true`) (+ `/:id/pdf`, `/:id/encerrar`, `/:id/cancelar`) |
 | POST | `/dds/:id/presencas`, `/dds/:id/presencas/manual` | Presença pelo crachá + PIN no dia / manual pela gestão |
-| GET/PUT | `/dds/metas` | Meta de frequência por setor ou filial |
-| GET | `/dds/pendencias`, `/dds/indicadores` | Metas atrasadas / participação do mês |
+| GET/PUT | `/dds/metas` | Meta de frequência opcional por setor ou filial |
+| GET | `/dds/indicadores`, `/dds/pendencias` | Participação do mês / situação das metas (se houver) |
 
 Todas as rotas, exceto `/ping` e `/auth/login`, exigem o cabeçalho `Authorization: Bearer <token>`.
 

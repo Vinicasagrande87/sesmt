@@ -1,5 +1,7 @@
-// Regras do DDS: frequência da meta, situação de cada meta (hoje ou numa data-base) e indicadores do mês.
-// Conta o DDS encerrado com ao menos uma presença válida. DDS da filial inteira (sem setor) vale para todos os setores.
+// Regras do DDS: indicadores do mês e, só para quem cadastrar, metas de frequência (opcionais).
+// O DDS é feito conforme a necessidade e a disponibilidade: não é obrigatório e não entra no semáforo de conformidade.
+// Sem meta cadastrada, nada é cobrado. Conta o DDS encerrado com ao menos uma presença válida;
+// DDS da filial inteira (sem setor) vale para todos os setores.
 const { hoje, somarDias, somarMeses, diasEntre } = require('../utils/datas');
 const { noEscopo } = require('../utils/escopo');
 const { funcionariosNaData } = require('./historico');

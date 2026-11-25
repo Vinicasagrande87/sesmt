@@ -6,7 +6,6 @@ const { dataHoraBR } = require('./formatos');
 const { TIPOS: TIPOS_OCORRENCIA, GRAVIDADES } = require('../services/ocorrencias');
 const { TIPOS_MEDIDA } = require('../services/acoes');
 const { TIPOS: TIPOS_PT } = require('../services/permissoes');
-const { FREQUENCIAS: FREQUENCIAS_DDS } = require('../services/dds');
 
 const SITUACOES = {
   // treinamentos / ASO
@@ -32,9 +31,7 @@ const SITUACOES = {
   // CIPA
   grau_risco_nao_informado: 'Grau de risco da filial não informado', sem_cipa: 'Precisa de CIPA e não tem mandato',
   sem_designado: 'Precisa de designado e não tem', composicao_incompleta: 'Composição incompleta', membro_sem_treinamento: 'Membro sem treinamento NR-5',
-  reuniao_atrasada: 'Reunião mensal atrasada', edital_atrasado: 'Edital da eleição atrasado', edital_proximo: 'Edital da eleição: prazo chegando',
-  // DDS
-  sem_dds: 'Nenhum DDS realizado', atrasado: 'DDS atrasado'
+  reuniao_atrasada: 'Reunião mensal atrasada', edital_atrasado: 'Edital da eleição atrasado', edital_proximo: 'Edital da eleição: prazo chegando'
 };
 const rotulo = (s) => SITUACOES[s] || s;
 const CORES = { verde: 'Verde', amarelo: 'Amarelo', vermelho: 'Vermelho', cinza: 'Sem dados' };
@@ -190,20 +187,6 @@ const RELATORIOS = {
       { titulo: 'Membro', largura: 120, valor: (i) => i.membro || '' },
       { titulo: 'Detalhe', largura: 180, valor: (i) => i.detalhe || '' },
       { titulo: 'Prazo', largura: 60, valor: (i) => i.vencimento, tipo: 'data' }
-    ]
-  },
-  dds: {
-    titulo: 'DDS — metas de frequência',
-    modulo: MODULOS.dds,
-    colunas: [
-      { titulo: 'Filial', largura: 130, valor: (i) => i.filial },
-      { titulo: 'Setor', largura: 130, valor: (i) => i.setor },
-      { titulo: 'Meta', largura: 90, valor: (i) => FREQUENCIAS_DDS[i.frequencia] },
-      { titulo: 'Situação', largura: 90, valor: (i) => rotulo(i.situacao) },
-      { titulo: 'Último DDS', largura: 65, valor: (i) => i.ultimo_dds, tipo: 'data' },
-      { titulo: 'Próximo até', largura: 65, valor: (i) => i.proximo, tipo: 'data' },
-      { titulo: 'Empregados', largura: 60, valor: (i) => i.empregados },
-      { titulo: 'Participação 30 dias', largura: 85, valor: (i) => `${String(i.participacao_30_dias).replace('.', ',')}%` }
     ]
   }
 };

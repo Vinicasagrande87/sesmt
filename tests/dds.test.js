@@ -112,8 +112,11 @@ test('encerramento com resumo; depois não entra mais ninguém', async () => {
   assert.equal(Buffer.from(await doc.arrayBuffer()).subarray(0, 5).toString(), '%PDF-');
 });
 
-test('metas de frequência: setor em dia, setor sem DDS, DDS da filial inteira vale para todos', async () => {
+test('metas de frequência (opcionais): sem meta nada é cobrado; DDS da filial inteira vale para todos', async () => {
   assert.equal(diaUtilAnterior('2026-11-23'), '2026-11-20', 'segunda -> sexta');
+  assert.deepEqual((await api('GET', `/dds/pendencias?todas=true&filial_id=${ids.A}`, { token: tk.consultaA })).body.itens, [], 'sem meta, sem cobrança');
+  const semDds = (await api('GET', `/painel/conformidade?filial_id=${ids.A}`, { token: tk.consultaA })).body.filiais[0];
+  assert.equal(semDds.modulos.dds, undefined, 'DDS não é obrigação: fora do semáforo');
   const meta = (token, body) => api('PUT', '/dds/metas', { token, body: { filial_id: ids.A, ...body } });
   assert.equal((await meta(tk.tecA, { setor_id: ids.manut, frequencia: 'semanal' })).status, 403);
   assert.equal((await meta(tk.gestorA, { setor_id: ids.manut, frequencia: 'toda_hora' })).status, 400);
@@ -136,10 +139,7 @@ test('metas de frequência: setor em dia, setor sem DDS, DDS da filial inteira v
   itens = await pend();
   assert.equal(itens.find((i) => i.setor === 'Limpeza').situacao, 'em_dia', 'DDS da filial inteira conta para o setor');
   assert.equal((await pend(`&data_base=${somarDias(HOJE, -1)}`)).find((i) => i.setor === 'Manutenção').situacao, 'sem_dds', 'ontem ainda não havia DDS');
-
-  const painel = (await api('GET', `/painel/conformidade?filial_id=${ids.A}`, { token: tk.consultaA })).body.filiais[0];
-  assert.equal(painel.modulos.dds.cor, 'verde');
-  assert.equal((await fetch(`${amb.base}/relatorios/dds?todas=true`, { headers: { Authorization: `Bearer ${tk.gestorA}` } })).status, 200);
+  assert.equal((await api('GET', '/relatorios/dds', { token: tk.gestorA })).status, 404, 'sem relatório de conformidade do DDS');
 });
 
 test('indicadores do mês: participação por setor e quem não participou', async () => {
